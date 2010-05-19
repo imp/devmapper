@@ -247,9 +247,14 @@ _init(void)
 	rc = ddi_soft_state_init(&dm_statep, sizeof (dm_state_t), 0);
 	if (rc != 0)
 		return (rc);
+
+	bd_mod_init(&dm_dev_ops);
 	rc = mod_install(&dm_modlinkage);
+
 	if (rc != 0)
+		bd_mod_fini(&dm_dev_ops);
 		ddi_soft_state_fini(&dm_statep);
+
 	return (rc);
 }
 
@@ -265,7 +270,12 @@ _fini(void)
 	int rc;
 
 	rc = mod_remove(&dm_modlinkage);
-	if (rc == 0)
-		ddi_soft_state_fini(&dm_statep);
+
+	if (rc != 0)
+		return (rc);
+
+	bd_mod_fini(&dm_dev_ops);
+	ddi_soft_state_fini(&dm_statep);
+
 	return (rc);
 }
