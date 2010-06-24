@@ -31,50 +31,40 @@
  * Device Mapper internal structures definitions
  */
 
+#include <sys/types.h>
+#include <sys/map.h>
+#include <sys/refstr.h>
+#include <sys/sunldi.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <sys/types.h>
-#include <sys/nvpair.h>
+#define	DM_4K_TABLELEN	1024
 
-/*
- * The internal mapping list is kept as nvlist of per-mapping nvlists
- * Each device map is described by the nvlist containing next nvpairs
- *
- * Name     | Type         | Value
- * ---------+--------------+------
- * name     | STRING       | name of the device
- * minor    | INT          | device minor number
- * trgarr   | NVLIST ARRAY | array of target definitions
- *
- * The top-level nvlist uses mapping names as a key, so that the name
- * essentially appears twice. Once as the key in the top-level list,
- * and twice as a `name' nvpair in the map nvlist itself.
- */
+#define DM_4K_LIST	1024
+#define	DM_4K_ATTACH	1025
+#define	DM_4K_DETACH	1026
 
-#define	DM_NAME		"name"
-#define	DM_MINOR	"minor"
-#define	DM_TRGARR	"trgarr"
-
-enum {
-	DM_TARGET_LINEAR = 0,
-	DM_TARGET_STRIPED,
-	DM_TARGET_ERROR
-};
-
-enum {
-	DM_OPENED = 1,
-	DM_SUSPENDED = 2,
-	DM_XXX = 4
-};
+typedef struct {
+	char		dev[MAXPATHLEN];
+	uint64_t	flags;
+} dm_4k_t;
 
 typedef struct {
 	dev_info_t	*dip;
+	ldi_ident_t	li;	/* LDI identifier */
+	struct map	*dm4kmap;
 	uint64_t	state;	/* State bit-field */
-	krwlock_t	slock;  /* State rw-lock */
-	nvlist_t	*mlp;	/* Mapping list pointer */
 } dm_state_t;
+
+typedef struct {
+	uint64_t	target;	/* Target / Index in table */
+	dm_state_t	*sp;
+	ldi_handle_t	lh;	/* LDI handle */
+	bd_handle_t	bdh;	/* block dev handle */
+	refstr_t	*dev;	/* Target device name */
+} dm_4k_info_t;
 
 #ifdef __cplusplus
 }

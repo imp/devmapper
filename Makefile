@@ -7,9 +7,10 @@ EXTRA_INCLUDES	= -I/data/opensolaris/onnv-gate/usr/src/uts/common
 
 MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
-CFLAGS		= -v -D_KERNEL $(C99MODE) $(EXTRA_INCLUDES)
+KERNEL		= -D_KERNEL
+CFLAGS		= -v $(KERNEL) $(C99MODE) $(EXTRA_INCLUDES)
 LDFLAGS		= -dy -Ndrv/blkdev
-
+LINTFLAGS	= $(KERNEL) $(EXTRA_INCLUDES) -errsecurity=extended -Nlevel
 SRCS		= dm.c
 
 OBJS32		= $(SRCS:%.c=32/%.o)
@@ -34,6 +35,12 @@ $(TARGET32):	32 $(OBJS32)
 
 $(TARGET64):	64 $(OBJS64)
 	$(LD) -r -o $(TARGET64) $(LDFLAGS) $(OBJS64)
+
+lint:
+	$(LINT.c) $(SRCS)
+
+cstyle:
+	cstyle -chpPv $(SRCS) dm.h
 
 clean:
 	$(RM) $(TARGET32) $(TARGET64) $(OBJS32) $(OBJS64)
