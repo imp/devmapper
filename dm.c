@@ -43,6 +43,8 @@
 static void		*dm_statep;
 static dm_4k_info_t	dm_4k_info[DM_4K_TABLELEN];
 
+#define DM4K_BLKSIZE	4096
+
 static void
 dm_bd_driveinfo(void *prv, bd_drive_t *bdp)
 {
@@ -58,6 +60,17 @@ dm_bd_driveinfo(void *prv, bd_drive_t *bdp)
 static int
 dm_bd_mediainfo(void *prv, bd_media_t *bmp)
 {
+	dm_4k_info_t	*dmp = (dm_4k_info_t *)prv;
+	uint64_t	size;
+
+	if (ldi_get_size(dmp->lh, &size) == DDI_FAILURE) {
+		return (3);
+	}
+
+	bmp->m_blksize = DM4K_BLKSIZE;
+	bmp->m_nblks = size / DM4K_BLKSIZE;
+	bmp->m_readonly = B_FALSE;
+
 	return (0);
 }
 
@@ -188,7 +201,7 @@ dm_detach_dev(dm_state_t *sp, const char *dev)
 }
 
 static int
-dm_ioctl_list(intptr_t buf, int mode)
+dm_list(intptr_t buf, int mode)
 {
 	for (int i = 0; i < DM_4K_TABLELEN; i++) {
 		const char	*dev = "";
@@ -276,7 +289,7 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 
 	switch (cmd) {
 	case DM_4K_LIST:
-		rc = dm_ioctl_list(arg, mode);
+		rc = dm_list(arg, mode);
 		break;
 	case DM_4K_ATTACH:
 		rc = dm_attach_dev(sp, dm_4k.dev, crp);
