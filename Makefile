@@ -3,7 +3,7 @@
 # Use is subject to license terms.
 #
 
-EXTRA_INCLUDES	= -I/data/opensolaris/onnv-gate/usr/src/uts/common
+EXTRA_INCLUDES	=
 
 MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
