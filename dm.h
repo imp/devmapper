@@ -40,6 +40,8 @@
 extern "C" {
 #endif
 
+#define DM_DRIVER_NAME	"dm"
+
 #define	DM_4K_TABLELEN	1024
 
 #define DM_4K_LIST	1024
