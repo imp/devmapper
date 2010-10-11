@@ -5,6 +5,9 @@
 
 EXTRA_INCLUDES	=
 
+CP		= cp
+MODULE		= dm
+CONFFLE		=$(MODULE).conf
 MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
 KERNEL		= -D_KERNEL
@@ -16,8 +19,8 @@ SRCS		= dm.c
 OBJS32		= $(SRCS:%.c=32/%.o)
 OBJS64		= $(SRCS:%.c=64/%.o)
 
-TARGET32	= 32/dm
-TARGET64	= 64/dm
+TARGET32	= 32/$(MODULE)
+TARGET64	= 64/$(MODULE)
 
 all: $(TARGET32) $(TARGET64)
 
@@ -35,6 +38,14 @@ $(TARGET32):	32 $(OBJS32)
 
 $(TARGET64):	64 $(OBJS64)
 	$(LD) -r -o $(TARGET64) $(LDFLAGS) $(OBJS64)
+
+install_files: $(CONFFILE) $(TARGET32) $(TARGET64)
+	$(CP) $(CONFFILE) /usr/kernel/drv
+	$(CP) $(TARGET32) /usr/kernel/drv
+	$(CP) $(TARGET64) /usr/kernel/drv/amd64
+
+install: install_files
+	add_drv -v -n $(MODULE)
 
 lint:
 	$(LINT.c) $(SRCS)
