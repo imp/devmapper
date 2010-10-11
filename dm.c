@@ -378,14 +378,17 @@ dm_attach(dev_info_t *dip, ddi_attach_cmd_t cmd)
 		return (DDI_FAILURE);
 	}
 
-	if (ddi_soft_state_zalloc(dm_statep, instance) != DDI_SUCCESS)
+	if (ddi_soft_state_zalloc(dm_statep, instance) != DDI_SUCCESS) {
+		cmn_err(CE_WARN, "dm_attach: ddi_soft_state_zalloc() failed");
 		return (DDI_FAILURE);
+	}
 
 	sp = ddi_get_soft_state(dm_statep, instance);
 
 	sp->dip = dip;
 
 	if (ldi_ident_from_dip(sp->dip, &sp->li) != 0) {
+		cmn_err(CE_WARN, "dm_attach: failed to get LDI identification");
 		ddi_soft_state_free(dm_statep, instance);
 		return (DDI_FAILURE);
 	}
@@ -401,6 +404,7 @@ dm_attach(dev_info_t *dip, ddi_attach_cmd_t cmd)
 
 	if (ddi_create_minor_node(dip, "ctl", S_IFCHR,
 	    instance, DDI_PSEUDO, 0) != DDI_SUCCESS) {
+		cmn_err(CE_WARN, "dm_attach: failed to create minor node");
 		rmfreemap(sp->dm4kmap);
 		ldi_ident_release(sp->li);
 		ddi_soft_state_free(dm_statep, instance);
@@ -481,9 +485,10 @@ _init(void)
 	bd_mod_init(&dm_dev_ops);
 	rc = mod_install(&dm_modlinkage);
 
-	if (rc != 0)
+	if (rc != 0) {
 		bd_mod_fini(&dm_dev_ops);
 		ddi_soft_state_fini(&dm_statep);
+	}
 
 	return (rc);
 }
@@ -501,8 +506,9 @@ _fini(void)
 
 	rc = mod_remove(&dm_modlinkage);
 
-	if (rc != 0)
+	if (rc != 0) {
 		return (rc);
+	}
 
 	bd_mod_fini(&dm_dev_ops);
 	ddi_soft_state_fini(&dm_statep);
