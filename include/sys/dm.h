@@ -32,6 +32,7 @@
  */
 
 #include <sys/types.h>
+#include <sys/param.h>
 
 #ifdef __cplusplus
 extern "C" {

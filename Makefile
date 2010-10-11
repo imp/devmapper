@@ -7,7 +7,7 @@ EXTRA_INCLUDES	=
 
 CP		= cp
 MODULE		= dm
-CONFFILE		=$(MODULE).conf
+CONFFILE	= $(MODULE).conf
 MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
 KERNEL		= -D_KERNEL
@@ -47,6 +47,9 @@ install_files: $(CONFFILE) $(TARGET32) $(TARGET64)
 
 install: install_files
 	pfexec add_drv -v -n $(MODULE)
+
+devlink:
+	echo "type=ddi_pseudo;name=dm\tdm\M0\tmapper/control" >> /etc/devlink.tab
 
 lint:
 	$(LINT.c) $(SRCS)
