@@ -38,7 +38,8 @@
 #include <sys/ddi.h>
 #include <sys/sunddi.h>
 
-#include "dm.h"
+#include <sys/dm.h>
+#include <sys/dm_impl.h>
 
 static void		*dm_statep;
 static dm_4k_info_t	dm_4k_info[DM_4K_TABLELEN];

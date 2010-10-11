@@ -28,13 +28,10 @@
 #define	SYS_DM_H
 
 /*
- * Device Mapper internal structures definitions
+ * Device Mapper control ABI definitions
  */
 
 #include <sys/types.h>
-#include <sys/map.h>
-#include <sys/refstr.h>
-#include <sys/sunldi.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,31 +39,16 @@ extern "C" {
 
 #define DM_DRIVER_NAME	"dm"
 
+#define DM_VERSION	0
+#define	DM_ABI_VERSION	0
+
 #define	DM_4K_TABLELEN	1024
 
 #define DM_4K_LIST	1024
 #define	DM_4K_ATTACH	1025
 #define	DM_4K_DETACH	1026
 
-typedef struct {
-	char		dev[MAXPATHLEN];
-	uint64_t	flags;
-} dm_4k_t;
-
-typedef struct {
-	dev_info_t	*dip;
-	ldi_ident_t	li;	/* LDI identifier */
-	struct map	*dm4kmap;
-	uint64_t	state;	/* State bit-field */
-} dm_state_t;
-
-typedef struct {
-	uint64_t	target;	/* Target / Index in table */
-	dm_state_t	*sp;
-	ldi_handle_t	lh;	/* LDI handle */
-	bd_handle_t	bdh;	/* block dev handle */
-	refstr_t	*dev;	/* Target device name */
-} dm_4k_info_t;
+#define	DM_MAXPATHLEN	MAXPATHLEN
 
 #ifdef __cplusplus
 }

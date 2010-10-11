@@ -11,9 +11,10 @@ CONFFILE		=$(MODULE).conf
 MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
 KERNEL		= -D_KERNEL
-CFLAGS		= -v $(KERNEL) $(C99MODE) $(EXTRA_INCLUDES)
+INCLUDES	= -Iinclude $(EXTRA_INCLUDES)
+CFLAGS		= -v $(KERNEL) $(C99MODE) $(INCLUDES)
 LDFLAGS		= -dy -Ndrv/blkdev
-LINTFLAGS	= $(KERNEL) $(EXTRA_INCLUDES) -errsecurity=extended -Nlevel
+LINTFLAGS	= $(KERNEL) $(INCLUDES) -errsecurity=extended -Nlevel
 SRCS		= dm.c
 
 OBJS32		= $(SRCS:%.c=32/%.o)
