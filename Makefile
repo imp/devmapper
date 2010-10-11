@@ -19,7 +19,7 @@ MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
 DEBUG		= -g -xO0
 KERNEL		= -D_KERNEL
-INCLUDES	= -Iinclude $(EXTRA_INCLUDES)
+INCLUDES	= -I./include $(EXTRA_INCLUDES)
 CFLAGS		= -v $(DEBUG) $(KERNEL) $(C99MODE) $(INCLUDES)
 CFLAGS_DMADM	= -v $(DEBUG) $(C99MODE) $(INCLUDES)
 LDFLAGS		= -dy -Ndrv/blkdev
@@ -47,13 +47,13 @@ all: $(MODULE32) $(MODULE64) $(DMADM)
 	$(COMPILE.c) $(MACH_64) -o $@ $<
 
 $(MODULE32):	32 $(OBJS32)
-	$(LD) -r -o $(MODULE32) $(LDFLAGS) $(OBJS32)
+	$(LD) -r -o $@ $(LDFLAGS) $(OBJS32)
 
 $(MODULE64):	64 $(OBJS64)
-	$(LD) -r -o $(MODULE64) $(LDFLAGS) $(OBJS64)
+	$(LD) -r -o $@ $(LDFLAGS) $(OBJS64)
 
 $(DMADM):	$(SRCS_DMADM)
-	$(CC) $(CFLAGS_DMADM) -o $(DMADM) $(SRCS_DMADM)
+	$(CC) $(CFLAGS_DMADM) -o $@ $(SRCS_DMADM)
 
 install_files: $(CONFFILE) $(MODULE32) $(MODULE64)
 	pfexec $(CP) $(CONFFILE) /usr/kernel/drv

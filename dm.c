@@ -44,7 +44,7 @@
 static void		*dm_statep;
 static dm_4k_info_t	dm_4k_info[DM_4K_TABLELEN];
 
-#define DM4K_BLKSIZE	4096
+#define	DM4K_BLKSIZE	4096
 
 static void
 dm_bd_driveinfo(void *prv, bd_drive_t *bdp)
@@ -140,7 +140,7 @@ dm_4k_info_free(dm_state_t *sp, dm_4k_info_t *dmp)
 {
 	refstr_rele(dmp->dev);
 	dmp->dev = NULL;
-	rmfree(sp->dm4kmap, 1, (ulong)dmp);
+	rmfree(sp->dm4kmap, 1, (ulong_t)dmp);
 }
 
 static int
@@ -161,7 +161,7 @@ dm_attach_dev(dm_state_t *sp, char *dev, cred_t *crp)
 		return (rc);
 	}
 
-	dmp->bdh = bd_alloc_handle(dmp, &bd_ops, NULL, KM_SLEEP); /* XXX Fix DMA */
+	dmp->bdh = bd_alloc_handle(dmp, &bd_ops, NULL, KM_SLEEP); /* Fix DMA */
 
 	ASSERT(dmp->bdh);
 
@@ -184,7 +184,8 @@ dm_detach_dev(dm_state_t *sp, const char *dev)
 		refstr_t *adev = dm_4k_info[i].dev;
 
 		if (adev != NULL) {
-			if (strncmp(refstr_value(adev), dev, MAXPATHLEN) == 0) {
+			if (strncmp(refstr_value(adev), dev,
+			    DM_MAXPATHLEN) == 0) {
 				dmp = dm_4k_info + i;
 			}
 		}
@@ -209,7 +210,7 @@ dm_list(intptr_t buf, int mode)
 {
 	for (int i = 0; i < DM_4K_TABLELEN; i++) {
 		const char	*dev = "";
-		void		*ubuf = (void *)(buf + i * MAXPATHLEN);
+		void		*ubuf = (void *)(buf + i * DM_MAXPATHLEN);
 
 		if (dm_4k_info[i].dev != NULL) {
 			dev = refstr_value(dm_4k_info[i].dev);
@@ -285,7 +286,8 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 	}
 
 	if ((cmd == DM_4K_ATTACH) || (cmd == DM_4K_DETACH)) {
-		rc = ddi_copyin((const void *)arg, &dm_4k, sizeof (dm_4k_t), mode);
+		rc = ddi_copyin((const void *)arg, &dm_4k,
+		    sizeof (dm_4k_t), mode);
 		if (rc == -1) {
 			return (EFAULT);
 		}
@@ -401,7 +403,7 @@ dm_attach(dev_info_t *dip, ddi_attach_cmd_t cmd)
 	}
 
 	sp->dm4kmap = rmallocmap_wait(DM_4K_TABLELEN);
-	rmfree(sp->dm4kmap, DM_4K_TABLELEN, (ulong)dm_4k_info);
+	rmfree(sp->dm4kmap, DM_4K_TABLELEN, (ulong_t)dm_4k_info);
 
 	if (ddi_create_minor_node(dip, "ctl", S_IFCHR,
 	    instance, DDI_PSEUDO, 0) != DDI_SUCCESS) {

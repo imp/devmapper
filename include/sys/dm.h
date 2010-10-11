@@ -38,14 +38,14 @@
 extern "C" {
 #endif
 
-#define DM_DRIVER_NAME	"dm"
+#define	DM_DRIVER_NAME	"dm"
 
-#define DM_VERSION	0
+#define	DM_VERSION	0
 #define	DM_ABI_VERSION	0
 
 #define	DM_4K_TABLELEN	1024
 
-#define DM_4K_LIST	1024
+#define	DM_4K_LIST	1024
 #define	DM_4K_ATTACH	1025
 #define	DM_4K_DETACH	1026
 

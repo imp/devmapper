@@ -41,8 +41,8 @@ extern "C" {
 #endif
 
 typedef struct {
-       char            dev[MAXPATHLEN];
-       uint64_t        flags;
+	char		dev[DM_MAXPATHLEN];
+	uint64_t	flags;
 } dm_4k_t;
 
 typedef struct {
