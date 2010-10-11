@@ -7,7 +7,7 @@ EXTRA_INCLUDES	=
 
 CP		= cp
 MODULE		= dm
-CONFFLE		=$(MODULE).conf
+CONFFILE		=$(MODULE).conf
 MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
 KERNEL		= -D_KERNEL
@@ -40,12 +40,12 @@ $(TARGET64):	64 $(OBJS64)
 	$(LD) -r -o $(TARGET64) $(LDFLAGS) $(OBJS64)
 
 install_files: $(CONFFILE) $(TARGET32) $(TARGET64)
-	$(CP) $(CONFFILE) /usr/kernel/drv
-	$(CP) $(TARGET32) /usr/kernel/drv
-	$(CP) $(TARGET64) /usr/kernel/drv/amd64
+	pfexec $(CP) $(CONFFILE) /usr/kernel/drv
+	pfexec $(CP) $(TARGET32) /usr/kernel/drv
+	pfexec $(CP) $(TARGET64) /usr/kernel/drv/amd64
 
 install: install_files
-	add_drv -v -n $(MODULE)
+	pfexec add_drv -v -n $(MODULE)
 
 lint:
 	$(LINT.c) $(SRCS)
