@@ -148,11 +148,14 @@ dm_attach_dev(dm_state_t *sp, char *dev, cred_t *crp)
 	dm_4k_info_t	*dmp;
 	int	rc;
 
+	cmn_err(CE_CONT, "Attaching new dev %s\n", dev);
+
 	/* Allocate new info structure */
 	dmp = dm_4k_info_alloc(sp, dev);
 
 	rc = ldi_open_by_name(dev, FREAD|FWRITE, crp, &dmp->lh, sp->li);
 	if (rc != 0) {
+		cmn_err(CE_WARN, "Failed to open device %s", dev);
 		dm_4k_info_free(sp, dmp);
 		return (rc);
 	}
@@ -173,6 +176,8 @@ dm_detach_dev(dm_state_t *sp, const char *dev)
 	int		i;
 	int		rc;
 
+	cmn_err(CE_CONT, "Detaching old dev %s\n", dev);
+
 	/* Find the device in our info table */
 	for (i = 0; (i < DM_4K_TABLELEN) && (dmp == NULL); i++) {
 		refstr_t *adev = dm_4k_info[i].dev;
@@ -185,13 +190,11 @@ dm_detach_dev(dm_state_t *sp, const char *dev)
 	}
 
 	if (dmp != NULL) {
+		cmn_err(CE_CONT, "Found %s info block\n", dev);
 		bd_detach_handle(dmp->bdh);
 		bd_free_handle(dmp->bdh);
 		ldi_close(dmp->lh, 0, NULL);
 		dm_4k_info_free(sp, dmp);
-		refstr_rele(dmp->dev);
-		dmp->dev = NULL;
-		rmfree(sp->dm4kmap, 1, (ulong)dmp);
 		rc = 0;
 	} else {
 		rc = EINVAL;
