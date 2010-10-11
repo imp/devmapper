@@ -2,6 +2,7 @@
 # Copyrigh 2010 Grigale Ltd. All rights reserved.
 # Use is subject to license terms.
 #
+.KEEP_STATE:
 
 EXTRA_INCLUDES	=
 
@@ -16,13 +17,15 @@ CONFFILE	= $(MODULE).conf
 MACH_32		=
 MACH_64		= -m64 -xmodel=kernel
 C99MODE		= -xc99=%all
+DEBUG		= -g -xO0
 KERNEL		= -D_KERNEL
 INCLUDES	= -Iinclude $(EXTRA_INCLUDES)
-CFLAGS		= -v $(KERNEL) $(C99MODE) $(INCLUDES)
-CFLAGS_DMADM	= -v $(C99MODE) $(INCLUDES)
+CFLAGS		= -v $(DEBUG) $(KERNEL) $(C99MODE) $(INCLUDES)
+CFLAGS_DMADM	= -v $(DEBUG) $(C99MODE) $(INCLUDES)
 LDFLAGS		= -dy -Ndrv/blkdev
 LINTFLAGS	= $(KERNEL) $(INCLUDES) -errsecurity=extended -Nlevel
 
+HDRS		= include/sys/dm.h include/sys/dm_impl.h
 SRCS		= dm.c
 SRCS_DMADM	= dmadm.c
 
@@ -67,7 +70,7 @@ lint:
 	$(LINT.c) $(SRCS)
 
 cstyle:
-	cstyle -chpPv $(SRCS) dm.h
+	cstyle -chpPv $(SRCS) $(SRCS_DMADM) $(HDRS)
 
 clean:
 	$(RM) $(DMADM) $(MODULE32) $(MODULE64) $(OBJS32) $(OBJS64)
