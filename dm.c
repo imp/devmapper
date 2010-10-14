@@ -175,7 +175,7 @@ dm_open(dev_t *devp, int flag, int otyp, cred_t *cp)
 }
 
 static int
-dm_close(dev_t dev, int flag, int otyp, cred_t *cp)
+dm_close(dev_t dev, int flag, int otyp, cred_t *crp)
 {
 	int		instance;
 	dm_state_t	*sp;
@@ -192,6 +192,18 @@ dm_close(dev_t dev, int flag, int otyp, cred_t *cp)
 	} else {
 		return (0);
 	}
+}
+
+static int
+dm_read(dev_t dev, struct uio *uiop, cred_t *crp)
+{
+	return (0);
+}
+
+static int
+dm_write(dev_t dev, struct uio *uiop, cred_t *crp)
+{
+	return (0);
 }
 
 static int
@@ -246,8 +258,8 @@ static struct cb_ops dm_cb_ops = {
 	.cb_strategy	= nodev,
 	.cb_print	= nodev,
 	.cb_dump	= nodev,
-	.cb_read	= nodev,
-	.cb_write	= nodev,
+	.cb_read	= dm_read,
+	.cb_write	= dm_write,
 	.cb_ioctl	= dm_ioctl,
 	.cb_devmap	= nodev,
 	.cb_mmap	= nodev,
