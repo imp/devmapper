@@ -39,15 +39,15 @@
 static int
 dm_list(int dmctl, int argc, char **argv, const char *usage)
 {
-	dm_4k_t	names[DM_4K_TABLELEN];
+	dm_entry_t	names[DM_INFO_TABLELEN];
 	int	rc;
 
-	rc = ioctl(dmctl, DM_4K_LIST, &names);
+	rc = ioctl(dmctl, DM_LIST, &names);
 	if (rc != 0) {
 		return (rc);
 	}
 
-	for (int i = 0; i < DM_4K_TABLELEN; i++) {
+	for (int i = 0; i < DM_INFO_TABLELEN; i++) {
 		if ((names[i].name) && (strlen(names[i].name) > 0)) {
 			printf("%d - %s\t(%s)\n", i,
 			    names[i].name, names[i].dev);
@@ -70,7 +70,7 @@ dm_version(int dmctl, int argc, char **argv, const char *usage)
 static int
 dm_create(int dmctl, int argc, char **argv, const char *usage)
 {
-	dm_4k_t		map;
+	dm_entry_t		map;
 	int		rc;
 
 	if (argc < 2) {
@@ -80,7 +80,7 @@ dm_create(int dmctl, int argc, char **argv, const char *usage)
 
 	(void) strncpy(map.name, argv[0], MAXNAMELEN);
 	(void) strncpy(map.dev, argv[1], MAXPATHLEN);
-	rc = ioctl(dmctl, DM_4K_ATTACH, &map);
+	rc = ioctl(dmctl, DM_ATTACH, &map);
 
 	return ((rc == -1) ? EXIT_FAILURE : EXIT_SUCCESS);
 }
@@ -88,7 +88,7 @@ dm_create(int dmctl, int argc, char **argv, const char *usage)
 static int
 dm_remove(int dmctl, int argc, char **argv, const char *usage)
 {
-	dm_4k_t		map;
+	dm_entry_t		map;
 	int		rc;
 
 	if (argc < 1) {
@@ -97,7 +97,7 @@ dm_remove(int dmctl, int argc, char **argv, const char *usage)
 	}
 
 	(void) strncpy(map.name, argv[0], MAXNAMELEN);
-	rc = ioctl(dmctl, DM_4K_DETACH, &map);
+	rc = ioctl(dmctl, DM_DETACH, &map);
 
 	return ((rc == -1) ? EXIT_FAILURE : EXIT_SUCCESS);
 }

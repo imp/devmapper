@@ -22,7 +22,7 @@ KERNEL		= -D_KERNEL
 INCLUDES	= -I./include $(EXTRA_INCLUDES)
 CFLAGS		= -v $(DEBUG) $(KERNEL) $(C99MODE) $(INCLUDES)
 CFLAGS_DMADM	= -v $(DEBUG) $(C99MODE) $(INCLUDES)
-LDFLAGS		= -dy -Ndrv/blkdev
+LDFLAGS		=
 LINTFLAGS	= $(KERNEL) $(INCLUDES) -errsecurity=extended -Nlevel
 
 HDRS		= include/sys/dm.h include/sys/dm_impl.h

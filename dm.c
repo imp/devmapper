@@ -25,7 +25,6 @@
  */
 
 
-#include <sys/blkdev.h>
 #include <sys/conf.h>
 #include <sys/cred.h>
 #include <sys/devops.h>
@@ -42,101 +41,12 @@
 #include <sys/dm_impl.h>
 
 static void		*dm_statep;
-static dm_4k_info_t	dm_4k_info[DM_4K_TABLELEN];
+static dm_info_t	dm_info[DM_INFO_TABLELEN];
 
-#define	DM4K_BLKSIZE	4096
-
-static ddi_dma_attr_t dm_dma_attr = {
-	.dma_attr_version	= DMA_ATTR_V0,
-	.dma_attr_addr_lo	= 0x0000000000000000,
-	.dma_attr_addr_hi	= 0xFFFFFFFFFFFFFFFF,
-	.dma_attr_count_max	= 1,
-	.dma_attr_align		= 4096,
-	.dma_attr_burstsizes	= 0,
-	.dma_attr_minxfer	= 512,			/* 1 sector min */
-	.dma_attr_maxxfer	= 512 * 2048,		/* 1 MB max */
-	.dma_attr_seg		= 512 * 2048 - 1,
-	.dma_attr_sgllen	= -1,
-	.dma_attr_granular	= 512,
-	.dma_attr_flags		= 0
-};
-
-static void
-dm_bd_driveinfo(void *prv, bd_drive_t *bdp)
+static dm_info_t *
+dm_info_alloc(dm_state_t *sp, const char *name, const char *dev)
 {
-	dm_4k_info_t	*dmp = (dm_4k_info_t *)prv;
-
-	bdp->d_qsize = 32;
-	bdp->d_maxxfer = 1024 * 1024; /* 1 MB - Fix me later */
-	bdp->d_removable = B_FALSE;
-	bdp->d_hotpluggable = B_FALSE;
-	bdp->d_target = dmp->target;
-}
-
-static int
-dm_bd_mediainfo(void *prv, bd_media_t *bmp)
-{
-	dm_4k_info_t	*dmp = (dm_4k_info_t *)prv;
-	uint64_t	size;
-
-	if (ldi_get_size(dmp->lh, &size) == DDI_FAILURE) {
-		return (3);
-	}
-
-	bmp->m_blksize = DM4K_BLKSIZE;
-	bmp->m_nblks = size / DM4K_BLKSIZE;
-	bmp->m_readonly = B_FALSE;
-
-	return (0);
-}
-
-static int
-dm_devid_init(void *prv, dev_info_t *dip, ddi_devid_t *didp)
-{
-	return (0);
-}
-
-static int
-dm_sync_cache(void *prv, bd_xfer_t *bxp)
-{
-	return (0);
-}
-
-static int
-dm_bd_read(void *prv, bd_xfer_t *bxp)
-{
-	return (0);
-}
-
-static int
-dm_bd_write(void *prv, bd_xfer_t *bxp)
-{
-	return (0);
-}
-
-#ifdef DUMP_SUPPORT
-static int
-dm_bd_dump(void *sp, bd_xfer_t *bxp)
-{
-	return (0);
-}
-#endif
-
-static bd_ops_t bd_ops = {
-	.o_version	= BD_OPS_VERSION_0,
-	.o_drive_info	= dm_bd_driveinfo,
-	.o_media_info	= dm_bd_mediainfo,
-	.o_devid_init	= dm_devid_init,
-	.o_sync_cache	= dm_sync_cache,
-	.o_read		= dm_bd_read,
-	.o_write	= dm_bd_write,
-	.o_dump		= NULL,
-};
-
-static dm_4k_info_t *
-dm_4k_info_alloc(dm_state_t *sp, const char *name, const char *dev)
-{
-	dm_4k_info_t	*dmp = NULL;
+	dm_info_t	*dmp = NULL;
 	refstr_t	*rsname;
 	refstr_t	*rsdev;
 
@@ -144,7 +54,7 @@ dm_4k_info_alloc(dm_state_t *sp, const char *name, const char *dev)
 	rsdev = refstr_alloc(dev);
 
 	/* Allocate new info structure */
-	dmp = (dm_4k_info_t *)rmalloc_wait(sp->dm4kmap, 1);
+	dmp = (dm_info_t *)rmalloc_wait(sp->dm_info_map, 1);
 	dmp->name = rsname;
 	dmp->dev = rsdev;
 
@@ -152,40 +62,31 @@ dm_4k_info_alloc(dm_state_t *sp, const char *name, const char *dev)
 }
 
 static void
-dm_4k_info_free(dm_state_t *sp, dm_4k_info_t *dmp)
+dm_info_free(dm_state_t *sp, dm_info_t *dmp)
 {
 	refstr_rele(dmp->name);
 	refstr_rele(dmp->dev);
 	dmp->name = NULL;
 	dmp->dev = NULL;
-	rmfree(sp->dm4kmap, 1, (ulong_t)dmp);
+	rmfree(sp->dm_info_map, 1, (ulong_t)dmp);
 }
 
 static int
 dm_attach_dev(dm_state_t *sp, const char *name, char *dev, cred_t *crp)
 {
-	dm_4k_info_t	*dmp;
+	dm_info_t	*dmp;
 	int	rc;
 
 	cmn_err(CE_CONT, "Attaching new map %s (%s)\n", name, dev);
 
 	/* Allocate new info structure */
-	dmp = dm_4k_info_alloc(sp, name, dev);
+	dmp = dm_info_alloc(sp, name, dev);
 
 	rc = ldi_open_by_name(dev, FREAD|FWRITE, crp, &dmp->lh, sp->li);
 	if (rc != 0) {
 		cmn_err(CE_WARN, "Failed to open device %s", dev);
-		dm_4k_info_free(sp, dmp);
+		dm_info_free(sp, dmp);
 		return (rc);
-	}
-
-	dmp->bdh = bd_alloc_handle(dmp, &bd_ops, &dm_dma_attr, KM_SLEEP);
-
-	rc = bd_attach_handle(sp->dip, dmp->bdh);
-	if (rc != DDI_SUCCESS) {
-		bd_free_handle(dmp->bdh);
-		ldi_close(dmp->lh, 0, NULL);
-		dm_4k_info_free(sp, dmp);
 	}
 
 	return (rc);
@@ -194,30 +95,28 @@ dm_attach_dev(dm_state_t *sp, const char *name, char *dev, cred_t *crp)
 static int
 dm_detach_dev(dm_state_t *sp, const char *mapname)
 {
-	dm_4k_info_t	*dmp = NULL;
+	dm_info_t	*dmp = NULL;
 	int		i;
 	int		rc;
 
 	cmn_err(CE_CONT, "Detaching old map %s\n", mapname);
 
 	/* Find the device in our info table */
-	for (i = 0; (i < DM_4K_TABLELEN) && (dmp == NULL); i++) {
-		refstr_t *name = dm_4k_info[i].name;
+	for (i = 0; (i < DM_INFO_TABLELEN) && (dmp == NULL); i++) {
+		refstr_t *name = dm_info[i].name;
 
 		if (name != NULL) {
 			if (strncmp(refstr_value(name), mapname,
 			    MAXNAMELEN) == 0) {
-				dmp = dm_4k_info + i;
+				dmp = dm_info + i;
 			}
 		}
 	}
 
 	if (dmp != NULL) {
 		cmn_err(CE_CONT, "Found %s info block\n", mapname);
-		bd_detach_handle(dmp->bdh);
-		bd_free_handle(dmp->bdh);
 		ldi_close(dmp->lh, 0, NULL);
-		dm_4k_info_free(sp, dmp);
+		dm_info_free(sp, dmp);
 		rc = 0;
 	} else {
 		rc = EINVAL;
@@ -229,18 +128,18 @@ dm_detach_dev(dm_state_t *sp, const char *mapname)
 static int
 dm_list(intptr_t buf, int mode)
 {
-	dm_4k_t		*dmlist;
+	dm_entry_t		*dmlist;
 	int		rc;
 
-	dmlist = kmem_zalloc(sizeof (dm_4k_t) * DM_4K_TABLELEN, KM_SLEEP);
+	dmlist = kmem_zalloc(sizeof (dm_entry_t) * DM_INFO_TABLELEN, KM_SLEEP);
 
-	for (int i = 0; i < DM_4K_TABLELEN; i++) {
+	for (int i = 0; i < DM_INFO_TABLELEN; i++) {
 		const char	*name = "";
 		const char	*dev = "";
 
-		if (dm_4k_info[i].name != NULL) {
-			name = refstr_value(dm_4k_info[i].name);
-			dev = refstr_value(dm_4k_info[i].dev);
+		if (dm_info[i].name != NULL) {
+			name = refstr_value(dm_info[i].name);
+			dev = refstr_value(dm_info[i].dev);
 		}
 
 		(void) strncpy(dmlist[i].name, name, MAXNAMELEN);
@@ -248,8 +147,8 @@ dm_list(intptr_t buf, int mode)
 	}
 
 	rc = ddi_copyout(dmlist, (void *)buf,
-	    sizeof (dm_4k_t) * DM_4K_TABLELEN, mode);
-	kmem_free(dmlist, sizeof (dm_4k_t) * DM_4K_TABLELEN);
+	    sizeof (dm_entry_t) * DM_INFO_TABLELEN, mode);
+	kmem_free(dmlist, sizeof (dm_entry_t) * DM_INFO_TABLELEN);
 
 	return ((rc == -1) ? (EFAULT) : (0));
 }
@@ -299,7 +198,7 @@ static int
 dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 {
 	dm_state_t	*sp;
-	dm_4k_t		dm_4k;
+	dm_entry_t	dm_entry;
 	int		instance;
 	int		rc;
 
@@ -314,24 +213,24 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 		return (EINVAL);
 	}
 
-	if ((cmd == DM_4K_ATTACH) || (cmd == DM_4K_DETACH)) {
-		rc = ddi_copyin((const void *)arg, &dm_4k,
-		    sizeof (dm_4k_t), mode);
+	if ((cmd == DM_ATTACH) || (cmd == DM_DETACH)) {
+		rc = ddi_copyin((const void *)arg, &dm_entry,
+		    sizeof (dm_entry_t), mode);
 		if (rc == -1) {
 			return (EFAULT);
 		}
 	}
 
 	switch (cmd) {
-	case DM_4K_LIST:
+	case DM_LIST:
 		rc = dm_list(arg, mode);
 		break;
-	case DM_4K_ATTACH:
-		rc = dm_attach_dev(sp, dm_4k.name, dm_4k.dev, crp);
+	case DM_ATTACH:
+		rc = dm_attach_dev(sp, dm_entry.name, dm_entry.dev, crp);
 		rc = (rc == DDI_SUCCESS) ? 0 : EIO;
 		break;
-	case DM_4K_DETACH:
-		rc = dm_detach_dev(sp, dm_4k.name);
+	case DM_DETACH:
+		rc = dm_detach_dev(sp, dm_entry.name);
 
 		break;
 	default:
@@ -427,18 +326,18 @@ dm_attach(dev_info_t *dip, ddi_attach_cmd_t cmd)
 	}
 
 	/* Pre-init device table */
-	for (int i = 0; i < DM_4K_TABLELEN; i++) {
-		dm_4k_info[i].sp = sp;
-		dm_4k_info[i].target = i;
+	for (int i = 0; i < DM_INFO_TABLELEN; i++) {
+		dm_info[i].sp = sp;
+		dm_info[i].target = i;
 	}
 
-	sp->dm4kmap = rmallocmap_wait(DM_4K_TABLELEN);
-	rmfree(sp->dm4kmap, DM_4K_TABLELEN, (ulong_t)dm_4k_info);
+	sp->dm_info_map = rmallocmap_wait(DM_INFO_TABLELEN);
+	rmfree(sp->dm_info_map, DM_INFO_TABLELEN, (ulong_t)dm_info);
 
 	if (ddi_create_minor_node(dip, "ctl", S_IFCHR,
 	    instance, DDI_PSEUDO, 0) != DDI_SUCCESS) {
 		cmn_err(CE_WARN, "dm_attach: failed to create minor node");
-		rmfreemap(sp->dm4kmap);
+		rmfreemap(sp->dm_info_map);
 		ldi_ident_release(sp->li);
 		ddi_soft_state_free(dm_statep, instance);
 		return (DDI_FAILURE);
@@ -471,7 +370,7 @@ dm_detach(dev_info_t *dip, ddi_detach_cmd_t cmd)
 
 	ddi_remove_minor_node(dip, 0);
 
-	rmfreemap(sp->dm4kmap);
+	rmfreemap(sp->dm_info_map);
 
 	ldi_ident_release(sp->li);
 
@@ -515,11 +414,9 @@ _init(void)
 	if (rc != 0)
 		return (rc);
 
-	bd_mod_init(&dm_dev_ops);
 	rc = mod_install(&dm_modlinkage);
 
 	if (rc != 0) {
-		bd_mod_fini(&dm_dev_ops);
 		ddi_soft_state_fini(&dm_statep);
 	}
 
@@ -543,7 +440,6 @@ _fini(void)
 		return (rc);
 	}
 
-	bd_mod_fini(&dm_dev_ops);
 	ddi_soft_state_fini(&dm_statep);
 
 	return (rc);
