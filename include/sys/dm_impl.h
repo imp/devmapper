@@ -41,11 +41,6 @@ extern "C" {
 #endif
 
 typedef struct {
-	char		dev[DM_MAXPATHLEN];
-	uint64_t	flags;
-} dm_4k_t;
-
-typedef struct {
 	dev_info_t	*dip;
 	ldi_ident_t	li;	/* LDI identifier */
 	struct map	*dm4kmap;
@@ -57,6 +52,7 @@ typedef struct {
 	dm_state_t	*sp;
 	ldi_handle_t	lh;	/* LDI handle */
 	bd_handle_t	bdh;	/* block dev handle */
+	refstr_t	*name;	/* Mapping name */
 	refstr_t	*dev;	/* Target device name */
 } dm_4k_info_t;
 

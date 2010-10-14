@@ -46,6 +46,21 @@ static dm_4k_info_t	dm_4k_info[DM_4K_TABLELEN];
 
 #define	DM4K_BLKSIZE	4096
 
+static ddi_dma_attr_t dm_dma_attr = {
+	.dma_attr_version	= DMA_ATTR_V0,
+	.dma_attr_addr_lo	= 0x0000000000000000,
+	.dma_attr_addr_hi	= 0xFFFFFFFFFFFFFFFF,
+	.dma_attr_count_max	= 1,
+	.dma_attr_align		= 4096,
+	.dma_attr_burstsizes	= 0,
+	.dma_attr_minxfer	= 512,			/* 1 sector min */
+	.dma_attr_maxxfer	= 512 * 2048,		/* 1 MB max */
+	.dma_attr_seg		= 512 * 2048 - 1,
+	.dma_attr_sgllen	= -1,
+	.dma_attr_granular	= 512,
+	.dma_attr_flags		= 0
+};
+
 static void
 dm_bd_driveinfo(void *prv, bd_drive_t *bdp)
 {
@@ -119,18 +134,19 @@ static bd_ops_t bd_ops = {
 };
 
 static dm_4k_info_t *
-dm_4k_info_alloc(dm_state_t *sp, const char *dev)
+dm_4k_info_alloc(dm_state_t *sp, const char *name, const char *dev)
 {
 	dm_4k_info_t	*dmp = NULL;
+	refstr_t	*rsname;
 	refstr_t	*rsdev;
 
+	rsname = refstr_alloc(name);
 	rsdev = refstr_alloc(dev);
 
-	if (rsdev != NULL) {
-		/* Allocate new info structure */
-		dmp = (dm_4k_info_t *)rmalloc_wait(sp->dm4kmap, 1);
-		dmp->dev = rsdev;
-	}
+	/* Allocate new info structure */
+	dmp = (dm_4k_info_t *)rmalloc_wait(sp->dm4kmap, 1);
+	dmp->name = rsname;
+	dmp->dev = rsdev;
 
 	return (dmp);
 }
@@ -138,21 +154,23 @@ dm_4k_info_alloc(dm_state_t *sp, const char *dev)
 static void
 dm_4k_info_free(dm_state_t *sp, dm_4k_info_t *dmp)
 {
+	refstr_rele(dmp->name);
 	refstr_rele(dmp->dev);
+	dmp->name = NULL;
 	dmp->dev = NULL;
 	rmfree(sp->dm4kmap, 1, (ulong_t)dmp);
 }
 
 static int
-dm_attach_dev(dm_state_t *sp, char *dev, cred_t *crp)
+dm_attach_dev(dm_state_t *sp, const char *name, char *dev, cred_t *crp)
 {
 	dm_4k_info_t	*dmp;
 	int	rc;
 
-	cmn_err(CE_CONT, "Attaching new dev %s\n", dev);
+	cmn_err(CE_CONT, "Attaching new map %s (%s)\n", name, dev);
 
 	/* Allocate new info structure */
-	dmp = dm_4k_info_alloc(sp, dev);
+	dmp = dm_4k_info_alloc(sp, name, dev);
 
 	rc = ldi_open_by_name(dev, FREAD|FWRITE, crp, &dmp->lh, sp->li);
 	if (rc != 0) {
@@ -161,38 +179,41 @@ dm_attach_dev(dm_state_t *sp, char *dev, cred_t *crp)
 		return (rc);
 	}
 
-	dmp->bdh = bd_alloc_handle(dmp, &bd_ops, NULL, KM_SLEEP); /* Fix DMA */
+	dmp->bdh = bd_alloc_handle(dmp, &bd_ops, &dm_dma_attr, KM_SLEEP);
 
-	ASSERT(dmp->bdh);
+	rc = bd_attach_handle(sp->dip, dmp->bdh);
+	if (rc != DDI_SUCCESS) {
+		bd_free_handle(dmp->bdh);
+		ldi_close(dmp->lh, 0, NULL);
+		dm_4k_info_free(sp, dmp);
+	}
 
-	bd_attach_handle(sp->dip, dmp->bdh);
-
-	return (0);
+	return (rc);
 }
 
 static int
-dm_detach_dev(dm_state_t *sp, const char *dev)
+dm_detach_dev(dm_state_t *sp, const char *mapname)
 {
 	dm_4k_info_t	*dmp = NULL;
 	int		i;
 	int		rc;
 
-	cmn_err(CE_CONT, "Detaching old dev %s\n", dev);
+	cmn_err(CE_CONT, "Detaching old map %s\n", mapname);
 
 	/* Find the device in our info table */
 	for (i = 0; (i < DM_4K_TABLELEN) && (dmp == NULL); i++) {
-		refstr_t *adev = dm_4k_info[i].dev;
+		refstr_t *name = dm_4k_info[i].name;
 
-		if (adev != NULL) {
-			if (strncmp(refstr_value(adev), dev,
-			    DM_MAXPATHLEN) == 0) {
+		if (name != NULL) {
+			if (strncmp(refstr_value(name), mapname,
+			    MAXNAMELEN) == 0) {
 				dmp = dm_4k_info + i;
 			}
 		}
 	}
 
 	if (dmp != NULL) {
-		cmn_err(CE_CONT, "Found %s info block\n", dev);
+		cmn_err(CE_CONT, "Found %s info block\n", mapname);
 		bd_detach_handle(dmp->bdh);
 		bd_free_handle(dmp->bdh);
 		ldi_close(dmp->lh, 0, NULL);
@@ -208,20 +229,29 @@ dm_detach_dev(dm_state_t *sp, const char *dev)
 static int
 dm_list(intptr_t buf, int mode)
 {
-	for (int i = 0; i < DM_4K_TABLELEN; i++) {
-		const char	*dev = "";
-		void		*ubuf = (void *)(buf + i * DM_MAXPATHLEN);
+	dm_4k_t		*dmlist;
+	int		rc;
 
-		if (dm_4k_info[i].dev != NULL) {
+	dmlist = kmem_zalloc(sizeof (dm_4k_t) * DM_4K_TABLELEN, KM_SLEEP);
+
+	for (int i = 0; i < DM_4K_TABLELEN; i++) {
+		const char	*name = "";
+		const char	*dev = "";
+
+		if (dm_4k_info[i].name != NULL) {
+			name = refstr_value(dm_4k_info[i].name);
 			dev = refstr_value(dm_4k_info[i].dev);
 		}
 
-		if (ddi_copyout(dev, ubuf, strlen(dev) + 1, mode) == -1) {
-			return (EFAULT);
-		}
+		(void) strncpy(dmlist[i].name, name, MAXNAMELEN);
+		(void) strncpy(dmlist[i].dev, dev, MAXPATHLEN);
 	}
 
-	return (0);
+	rc = ddi_copyout(dmlist, (void *)buf,
+	    sizeof (dm_4k_t) * DM_4K_TABLELEN, mode);
+	kmem_free(dmlist, sizeof (dm_4k_t) * DM_4K_TABLELEN);
+
+	return ((rc == -1) ? (EFAULT) : (0));
 }
 
 static int
@@ -269,7 +299,6 @@ static int
 dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 {
 	dm_state_t	*sp;
-	dm_4k_info_t	dmp;
 	dm_4k_t		dm_4k;
 	int		instance;
 	int		rc;
@@ -298,10 +327,11 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 		rc = dm_list(arg, mode);
 		break;
 	case DM_4K_ATTACH:
-		rc = dm_attach_dev(sp, dm_4k.dev, crp);
+		rc = dm_attach_dev(sp, dm_4k.name, dm_4k.dev, crp);
+		rc = (rc == DDI_SUCCESS) ? 0 : EIO;
 		break;
 	case DM_4K_DETACH:
-		rc = dm_detach_dev(sp, dm_4k.dev);
+		rc = dm_detach_dev(sp, dm_4k.name);
 
 		break;
 	default:

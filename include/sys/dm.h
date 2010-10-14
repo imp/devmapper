@@ -49,7 +49,11 @@ extern "C" {
 #define	DM_4K_ATTACH	1025
 #define	DM_4K_DETACH	1026
 
-#define	DM_MAXPATHLEN	MAXPATHLEN
+typedef struct {
+	char		name[MAXNAMELEN];
+	char		dev[MAXPATHLEN];
+	uint64_t	flags;
+} dm_4k_t;
 
 #ifdef __cplusplus
 }

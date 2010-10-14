@@ -39,12 +39,19 @@
 static int
 dm_list(int dmctl, int argc, char **argv, const char *usage)
 {
-	char	names[MAXPATHLEN][DM_4K_TABLELEN];
+	dm_4k_t	names[DM_4K_TABLELEN];
 	int	rc;
 
 	rc = ioctl(dmctl, DM_4K_LIST, &names);
-	if (rc == 0) {
-		;
+	if (rc != 0) {
+		return (rc);
+	}
+
+	for (int i = 0; i < DM_4K_TABLELEN; i++) {
+		if ((names[i].name) && (strlen(names[i].name) > 0)) {
+			printf("%d - %s\t(%s)\n", i,
+			    names[i].name, names[i].dev);
+		}
 	}
 	return (rc);
 }
@@ -63,13 +70,36 @@ dm_version(int dmctl, int argc, char **argv, const char *usage)
 static int
 dm_create(int dmctl, int argc, char **argv, const char *usage)
 {
-	return (EXIT_FAILURE);
+	dm_4k_t		map;
+	int		rc;
+
+	if (argc < 2) {
+		(void) fprintf(stderr, usage);
+		return (EXIT_FAILURE);
+	}
+
+	(void) strncpy(map.name, argv[0], MAXNAMELEN);
+	(void) strncpy(map.dev, argv[1], MAXPATHLEN);
+	rc = ioctl(dmctl, DM_4K_ATTACH, &map);
+
+	return ((rc == -1) ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 static int
 dm_remove(int dmctl, int argc, char **argv, const char *usage)
 {
-	return (EXIT_FAILURE);
+	dm_4k_t		map;
+	int		rc;
+
+	if (argc < 1) {
+		(void) fprintf(stderr, usage);
+		return (EXIT_FAILURE);
+	}
+
+	(void) strncpy(map.name, argv[0], MAXNAMELEN);
+	rc = ioctl(dmctl, DM_4K_DETACH, &map);
+
+	return ((rc == -1) ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 static int
@@ -126,9 +156,13 @@ main(int argc, char **argv)
 				return (EXIT_FAILURE);
 			}
 
-			rc = commands[i].func(dmctl, argc - 1, &argv[1],
+			rc = commands[i].func(dmctl, argc - 2, &argv[2],
 			    commands[i].usage);
 			(void) close(dmctl);
+			if (rc != 0) {
+				(void) fprintf(stderr, "%s command failed\n",
+				    commands[i].cmd);
+			}
 			return (rc);
 		}
 	}
