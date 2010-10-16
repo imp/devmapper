@@ -4,30 +4,21 @@
 #
 .KEEP_STATE:
 
-EXTRA_INCLUDES	=
-
-# Utilities
-CP		= cp
+include ../Makefile.defs
 
 # Build targets
 MODULE		= dm
-DMADM		= dmadm
 
 CONFFILE	= $(MODULE).conf
-MACH_32		=
-MACH_64		= -m64 -xmodel=kernel
-C99MODE		= -xc99=%all
-DEBUG		= -g -xO0
 KERNEL		= -D_KERNEL
-INCLUDES	= -I./include $(EXTRA_INCLUDES)
-CFLAGS		= -v $(DEBUG) $(KERNEL) $(C99MODE) $(INCLUDES)
-CFLAGS_DMADM	= -v $(DEBUG) $(C99MODE) $(INCLUDES)
+MACH_64		+= -xmodel=kernel
+INCLUDES	= -I../include $(EXTRA_INCLUDES)
+CFLAGS		+= -v $(KERNEL)
 LDFLAGS		=
 LINTFLAGS	= $(KERNEL) $(INCLUDES) -errsecurity=extended -Nlevel
 
-HDRS		= include/sys/dm.h include/sys/dm_impl.h
+HDRS		= ../include/sys/dm.h ../include/sys/dm_impl.h
 SRCS		= dm.c
-SRCS_DMADM	= dmadm.c
 
 OBJS32		= $(SRCS:%.c=32/%.o)
 OBJS64		= $(SRCS:%.c=64/%.o)
@@ -35,7 +26,7 @@ OBJS64		= $(SRCS:%.c=64/%.o)
 MODULE32	= 32/$(MODULE)
 MODULE64	= 64/$(MODULE)
 
-all: $(MODULE32) $(MODULE64) $(DMADM)
+all: $(MODULE32) $(MODULE64)
 
 32 64:
 	mkdir $@
@@ -52,9 +43,6 @@ $(MODULE32):	32 $(OBJS32)
 $(MODULE64):	64 $(OBJS64)
 	$(LD) -r -o $@ $(LDFLAGS) $(OBJS64)
 
-$(DMADM):	$(SRCS_DMADM)
-	$(CC) $(MACH_64) $(CFLAGS_DMADM) -o $@ $(SRCS_DMADM)
-
 install_files: $(CONFFILE) $(MODULE32) $(MODULE64)
 	pfexec $(CP) $(CONFFILE) /usr/kernel/drv
 	pfexec $(CP) $(MODULE32) /usr/kernel/drv
@@ -70,7 +58,7 @@ lint:
 	$(LINT.c) $(SRCS)
 
 cstyle:
-	cstyle -chpPv $(SRCS) $(SRCS_DMADM) $(HDRS)
+	cstyle -chpPv $(SRCS) $(HDRS)
 
 clean:
-	$(RM) $(DMADM) $(MODULE32) $(MODULE64) $(OBJS32) $(OBJS64)
+	$(RM) $(MODULE32) $(MODULE64) $(OBJS32) $(OBJS64)

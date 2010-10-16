@@ -55,7 +55,7 @@ dm_minor_init(dm_state_t *sp)
 static void
 dm_minor_fini(dm_state_t *sp)
 {
-	rmfreemap(sp->dm_minor_map);;
+	rmfreemap(sp->dm_minor_map);
 }
 
 static minor_t
@@ -74,7 +74,7 @@ dm_minor_free(dm_state_t *sp, minor_t minor)
 static int
 dm_info_init(dm_state_t *sp)
 {
-	return (ddi_soft_state_init(&sp->dm_infop, sizeof(dm_info_t), 0));
+	return (ddi_soft_state_init(&sp->dm_infop, sizeof (dm_info_t), 0));
 }
 
 static void
@@ -130,7 +130,7 @@ dm_name2minor(dm_state_t *sp, const char *name)
 {
 	minor_t	minor = 0;
 
-	for(int i = 1; i < DM_MINOR_MAX; i++) {
+	for (int i = 1; i < DM_MINOR_MAX; i++) {
 		dm_info_t *dmp = ddi_get_soft_state(sp->dm_infop, i);
 
 		if (dmp == NULL)
