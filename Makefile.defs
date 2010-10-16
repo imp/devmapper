@@ -1,0 +1,23 @@
+#
+# Copyrigh 2010 Grigale Ltd. All rights reserved.
+# Use is subject to license terms.
+#
+.KEEP_STATE:
+
+EXTRA_INCLUDES	=
+
+# Utilities
+CP		= cp
+
+# Global definitions
+MACH_32		=
+MACH_64		= -m64 -xmodel=kernel
+C99MODE		= -xc99=%all
+DEBUG		= -g -xO0
+KERNEL		= -D_KERNEL
+INCLUDES	= -I./include $(EXTRA_INCLUDES)
+CFLAGS		= -v $(DEBUG) $(C99MODE) $(INCLUDES)
+
+LDFLAGS		=
+LINTFLAGS	= $(KERNEL) $(INCLUDES) -errsecurity=extended -Nlevel
+
