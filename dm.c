@@ -145,7 +145,45 @@ dm_name2minor(dm_state_t *sp, const char *name)
 
 
 static int
-dm_attach_dev(dm_state_t *sp, const char *name, char *dev, cred_t *crp)
+dm_create_minor_nodes(dm_state_t *sp, char *name, minor_t minor)
+{
+	char	*nodename;
+	int	rc;
+
+	nodename = kmem_alloc(MAXNAMELEN + 4, KM_SLEEP);
+
+	(void) snprintf(nodename, MAXNAMELEN + 4, "%s,raw", name);
+	rc = ddi_create_minor_node(sp->dip, nodename, S_IFCHR, minor,
+	    DDI_NT_BLOCK, 0);
+
+	(void) snprintf(nodename, MAXNAMELEN + 4, "%s,blk", name);
+	rc = ddi_create_minor_node(sp->dip,  nodename, S_IFBLK, minor,
+	    DDI_NT_BLOCK, 0);
+
+	kmem_free(nodename, MAXNAMELEN + 4);
+
+	return (DDI_SUCCESS);
+}
+
+static void
+dm_remove_minor_nodes(dm_state_t *sp, char *name)
+{
+	char	*nodename;
+
+	nodename = kmem_alloc(MAXNAMELEN + 4, KM_SLEEP);
+
+	(void) snprintf(nodename, MAXNAMELEN + 4, "%s,raw", name);
+	ddi_remove_minor_node(sp->dip, nodename);
+
+	(void) snprintf(nodename, MAXNAMELEN + 4, "%s,blk", name);
+	ddi_remove_minor_node(sp->dip, nodename);
+
+	kmem_free(nodename, MAXNAMELEN + 4);
+}
+
+
+static int
+dm_attach_dev(dm_state_t *sp, char *name, char *dev, cred_t *crp)
 {
 	dm_info_t	*dmp;
 	minor_t		minor;
@@ -165,31 +203,42 @@ dm_attach_dev(dm_state_t *sp, const char *name, char *dev, cred_t *crp)
 		return (rc);
 	}
 
+	rc = dm_create_minor_nodes(sp, name, minor);
+
+	if (rc != DDI_SUCCESS) {
+		dm_remove_minor_nodes(sp, name);
+		ldi_close(dmp->lh, 0, NULL);
+		dm_info_free(sp, minor);
+		dm_minor_free(sp, minor);
+		return (rc);
+	}
 	return (rc);
 }
 
 static int
-dm_detach_dev(dm_state_t *sp, const char *mapname)
+dm_detach_dev(dm_state_t *sp, char *name)
 {
 	minor_t		minor;
 	dm_info_t	*dmp = NULL;
-	int		rc;
 
-	cmn_err(CE_CONT, "Detaching old map %s\n", mapname);
+	cmn_err(CE_CONT, "Detaching old map %s\n", name);
 
-	minor = dm_name2minor(sp, mapname);
-	dmp = dm_info_get(sp, minor);
-	if (minor != 0) {
-		cmn_err(CE_CONT, "Found %s info block\n", mapname);
-		ldi_close(dmp->lh, 0, NULL);
-		dm_info_free(sp, minor);
-		dm_minor_free(sp, minor);
-		rc = 0;
-	} else {
-		rc = EINVAL;
+	minor = dm_name2minor(sp, name);
+
+	if (minor == 0) {
+		return (EINVAL);
 	}
 
-	return (rc);
+	dmp = dm_info_get(sp, minor);
+
+	cmn_err(CE_CONT, "Found %s info block\n", name);
+
+	dm_remove_minor_nodes(sp, name);
+	ldi_close(dmp->lh, 0, NULL);
+	dm_info_free(sp, minor);
+	dm_minor_free(sp, minor);
+
+	return (0);
 }
 
 static int
