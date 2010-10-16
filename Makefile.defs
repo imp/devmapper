@@ -11,7 +11,7 @@ CP		= cp
 
 # Global definitions
 MACH_32		=
-MACH_64		= -m64 -xmodel=kernel
+MACH_64		= -m64
 C99MODE		= -xc99=%all
 DEBUG		= -g -xO0
 KERNEL		= -D_KERNEL
