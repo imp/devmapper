@@ -43,16 +43,16 @@ extern "C" {
 typedef struct {
 	dev_info_t	*dip;
 	ldi_ident_t	li;	/* LDI identifier */
-	struct map	*dm_info_map;
+	struct map	*dm_minor_map;
+	void		*dm_infop;
 	uint64_t	state;	/* State bit-field */
 } dm_state_t;
 
 typedef struct {
-	uint64_t	target;	/* Target / Index in table */
-	dm_state_t	*sp;
-	ldi_handle_t	lh;	/* LDI handle */
 	refstr_t	*name;	/* Mapping name */
 	refstr_t	*dev;	/* Target device name */
+	ldi_handle_t	lh;	/* LDI handle */
+	uint64_t	target;	/* Target / Index in table */
 } dm_info_t;
 
 #ifdef __cplusplus

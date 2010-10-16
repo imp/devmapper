@@ -53,7 +53,7 @@ $(MODULE64):	64 $(OBJS64)
 	$(LD) -r -o $@ $(LDFLAGS) $(OBJS64)
 
 $(DMADM):	$(SRCS_DMADM)
-	$(CC) $(CFLAGS_DMADM) -o $@ $(SRCS_DMADM)
+	$(CC) $(MACH_64) $(CFLAGS_DMADM) -o $@ $(SRCS_DMADM)
 
 install_files: $(CONFFILE) $(MODULE32) $(MODULE64)
 	pfexec $(CP) $(CONFFILE) /usr/kernel/drv

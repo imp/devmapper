@@ -37,22 +37,37 @@
 #define	DMCTLNAME	"/dev/dmctl"
 
 static int
+dm_none(int dmctl, int argc, char **argv, const char *usage)
+{
+	printf("dm_none(%d, %d, %p, %p)\n", dmctl, argc, argv, usage);
+	return (EXIT_SUCCESS);
+}
+
+static int
 dm_list(int dmctl, int argc, char **argv, const char *usage)
 {
-	dm_entry_t	names[DM_INFO_TABLELEN];
-	int	rc;
+	dm_entry_t	*names;
+	int		rc;
 
-	rc = ioctl(dmctl, DM_LIST, &names);
+	names = calloc(sizeof(dm_entry_t), DM_MINOR_MAX);
+
+	if (names == NULL) {
+		return (EXIT_FAILURE);
+	}
+
+	rc = ioctl(dmctl, DM_LIST, names);
 	if (rc != 0) {
+		free(names);
 		return (rc);
 	}
 
-	for (int i = 0; i < DM_INFO_TABLELEN; i++) {
+	for (int i = 0; i < DM_MINOR_MAX; i++) {
 		if ((names[i].name) && (strlen(names[i].name) > 0)) {
 			printf("%d - %s\t(%s)\n", i,
 			    names[i].name, names[i].dev);
 		}
 	}
+	free(names);
 	return (rc);
 }
 
@@ -64,7 +79,7 @@ dm_version(int dmctl, int argc, char **argv, const char *usage)
 	    "\tCLI ABI version\t\t%d\n"
 	    "\tKernel ABI version\t%d\n",
 	    DM_VERSION, DM_ABI_VERSION, DM_ABI_VERSION);
-	return (0);
+	return (EXIT_SUCCESS);
 }
 
 static int
@@ -118,6 +133,7 @@ typedef struct {
 } cmd_t;
 
 static cmd_t commands[] = {
+	{"none", dm_none, "<classified>"},
 	{"version", dm_version, "version"},
 	{"list", dm_list, "list [mapping]"},
 	{"show", dm_list, "show <mapping>"},
@@ -150,6 +166,9 @@ main(int argc, char **argv)
 	for (int i = 0; commands[i].cmd != NULL; i++) {
 
 		if (strcmp(argv[1], commands[i].cmd) == 0) {
+#ifdef DEBUG
+			printf("Detected command '%s'\n", commands[i].cmd);
+#endif
 			/* Open the device mapper control node */
 			if ((dmctl = open(DMCTLNAME, O_RDWR)) == -1) {
 				perror("Failed to open DM control node");

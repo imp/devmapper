@@ -43,7 +43,7 @@ extern "C" {
 #define	DM_VERSION	0
 #define	DM_ABI_VERSION	0
 
-#define	DM_INFO_TABLELEN	1024
+#define	DM_MINOR_MAX	20480
 
 #define	DM_LIST		1024
 #define	DM_ATTACH	1025

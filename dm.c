@@ -40,21 +40,65 @@
 #include <sys/dm.h>
 #include <sys/dm_impl.h>
 
-static void		*dm_statep;
-static dm_info_t	dm_info[DM_INFO_TABLELEN];
+static dm_state_t	dm_state = {
+	.dip		= NULL,
+};
+
+static void
+dm_minor_init(dm_state_t *sp)
+{
+	/* Pre-init device table */
+	sp->dm_minor_map = rmallocmap_wait(DM_MINOR_MAX);
+	rmfree(sp->dm_minor_map, DM_MINOR_MAX, 1);
+}
+
+static void
+dm_minor_fini(dm_state_t *sp)
+{
+	rmfreemap(sp->dm_minor_map);;
+}
+
+static minor_t
+dm_minor_alloc(dm_state_t *sp)
+{
+	return (rmalloc_wait(sp->dm_minor_map, 1));
+}
+
+static void
+dm_minor_free(dm_state_t *sp, minor_t minor)
+{
+	rmfree(sp->dm_minor_map, 1, (ulong_t)minor);
+}
+
+
+static int
+dm_info_init(dm_state_t *sp)
+{
+	return (ddi_soft_state_init(&sp->dm_infop, sizeof(dm_info_t), 0));
+}
+
+static void
+dm_info_fini(dm_state_t *sp)
+{
+	ddi_soft_state_fini(&sp->dm_infop);
+}
 
 static dm_info_t *
-dm_info_alloc(dm_state_t *sp, const char *name, const char *dev)
+dm_info_alloc(dm_state_t *sp, minor_t minor, const char *name, const char *dev)
 {
 	dm_info_t	*dmp = NULL;
 	refstr_t	*rsname;
 	refstr_t	*rsdev;
 
+	/* Allocate new info structure */
+	if (ddi_soft_state_zalloc(sp->dm_infop, (int)minor) == DDI_FAILURE) {
+		return (NULL);
+	}
+
+	dmp = ddi_get_soft_state(sp->dm_infop, (int)minor);
+	cmn_err(CE_CONT, "New dm_info (%d) allocated %p\n", minor, dmp);
 	rsname = refstr_alloc(name);
 	rsdev = refstr_alloc(dev);
-
-	/* Allocate new info structure */
-	dmp = (dm_info_t *)rmalloc_wait(sp->dm_info_map, 1);
 	dmp->name = rsname;
 	dmp->dev = rsdev;
 
@@ -62,30 +106,62 @@ dm_info_alloc(dm_state_t *sp, const char *name, const char *dev)
 }
 
 static void
-dm_info_free(dm_state_t *sp, dm_info_t *dmp)
+dm_info_free(dm_state_t *sp, minor_t minor)
 {
+	dm_info_t	*dmp;
+
+	dmp = ddi_get_soft_state(sp->dm_infop, (int)minor);
+
 	refstr_rele(dmp->name);
 	refstr_rele(dmp->dev);
-	dmp->name = NULL;
-	dmp->dev = NULL;
-	rmfree(sp->dm_info_map, 1, (ulong_t)dmp);
+
+	ddi_soft_state_free(sp->dm_infop, (int)minor);
 }
+
+static dm_info_t *
+dm_info_get(dm_state_t *sp, minor_t minor)
+{
+	return (ddi_get_soft_state(sp->dm_infop, (int)minor));
+}
+
+/* Loop through all the item in the dm_info state till the match found */
+static minor_t
+dm_name2minor(dm_state_t *sp, const char *name)
+{
+	minor_t	minor = 0;
+
+	for(int i = 1; i < DM_MINOR_MAX; i++) {
+		dm_info_t *dmp = ddi_get_soft_state(sp->dm_infop, i);
+
+		if (dmp == NULL)
+			continue;
+		if (strncmp(refstr_value(dmp->name), name, MAXNAMELEN) == 0) {
+			minor = (minor_t)i;
+			break;
+		}
+	}
+	return (minor);
+}
+
 
 static int
 dm_attach_dev(dm_state_t *sp, const char *name, char *dev, cred_t *crp)
 {
 	dm_info_t	*dmp;
-	int	rc;
+	minor_t		minor;
+	int		rc;
 
 	cmn_err(CE_CONT, "Attaching new map %s (%s)\n", name, dev);
 
+	minor = dm_minor_alloc(sp);
+
 	/* Allocate new info structure */
-	dmp = dm_info_alloc(sp, name, dev);
+	dmp = dm_info_alloc(sp, minor, name, dev);
 
 	rc = ldi_open_by_name(dev, FREAD|FWRITE, crp, &dmp->lh, sp->li);
 	if (rc != 0) {
 		cmn_err(CE_WARN, "Failed to open device %s", dev);
-		dm_info_free(sp, dmp);
+		dm_info_free(sp, minor);
 		return (rc);
 	}
 
@@ -95,28 +171,19 @@ dm_attach_dev(dm_state_t *sp, const char *name, char *dev, cred_t *crp)
 static int
 dm_detach_dev(dm_state_t *sp, const char *mapname)
 {
+	minor_t		minor;
 	dm_info_t	*dmp = NULL;
-	int		i;
 	int		rc;
 
 	cmn_err(CE_CONT, "Detaching old map %s\n", mapname);
 
-	/* Find the device in our info table */
-	for (i = 0; (i < DM_INFO_TABLELEN) && (dmp == NULL); i++) {
-		refstr_t *name = dm_info[i].name;
-
-		if (name != NULL) {
-			if (strncmp(refstr_value(name), mapname,
-			    MAXNAMELEN) == 0) {
-				dmp = dm_info + i;
-			}
-		}
-	}
-
-	if (dmp != NULL) {
+	minor = dm_name2minor(sp, mapname);
+	dmp = dm_info_get(sp, minor);
+	if (minor != 0) {
 		cmn_err(CE_CONT, "Found %s info block\n", mapname);
 		ldi_close(dmp->lh, 0, NULL);
-		dm_info_free(sp, dmp);
+		dm_info_free(sp, minor);
+		dm_minor_free(sp, minor);
 		rc = 0;
 	} else {
 		rc = EINVAL;
@@ -126,29 +193,50 @@ dm_detach_dev(dm_state_t *sp, const char *mapname)
 }
 
 static int
+dm_ioctl_dev(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
+{
+	minor_t		minor;
+	int		rc;
+	dm_state_t	*sp = &dm_state;
+	dm_info_t	*dmip;
+
+	minor = getminor(dev);
+
+	dmip = dm_info_get(sp, minor);
+
+	if (dmip == NULL)
+		return (ENXIO);
+
+	return (EINVAL);
+}
+
+static int
 dm_list(intptr_t buf, int mode)
 {
-	dm_entry_t		*dmlist;
+	dm_state_t	*sp = &dm_state;
+	dm_entry_t	*dmlist;
 	int		rc;
 
-	dmlist = kmem_zalloc(sizeof (dm_entry_t) * DM_INFO_TABLELEN, KM_SLEEP);
+	dmlist = kmem_zalloc(sizeof (dm_entry_t) * DM_MINOR_MAX, KM_SLEEP);
 
-	for (int i = 0; i < DM_INFO_TABLELEN; i++) {
+	for (int i = 1; i <= DM_MINOR_MAX; i++) {
 		const char	*name = "";
 		const char	*dev = "";
+		dm_info_t	*dmip = dm_info_get(sp, (minor_t)i);
 
-		if (dm_info[i].name != NULL) {
-			name = refstr_value(dm_info[i].name);
-			dev = refstr_value(dm_info[i].dev);
+		if (dmip != NULL) {
+			name = refstr_value(dmip->name);
+			dev = refstr_value(dmip->dev);
+			cmn_err(CE_CONT, "Found mapping %s (%d)\n", name, i);
 		}
 
-		(void) strncpy(dmlist[i].name, name, MAXNAMELEN);
-		(void) strncpy(dmlist[i].dev, dev, MAXPATHLEN);
+		(void) strncpy(dmlist[i - 1].name, name, MAXNAMELEN);
+		(void) strncpy(dmlist[i - 1].dev, dev, MAXPATHLEN);
 	}
 
 	rc = ddi_copyout(dmlist, (void *)buf,
-	    sizeof (dm_entry_t) * DM_INFO_TABLELEN, mode);
-	kmem_free(dmlist, sizeof (dm_entry_t) * DM_INFO_TABLELEN);
+	    sizeof (dm_entry_t) * DM_MINOR_MAX, mode);
+	kmem_free(dmlist, sizeof (dm_entry_t) * DM_MINOR_MAX);
 
 	return ((rc == -1) ? (EFAULT) : (0));
 }
@@ -156,42 +244,53 @@ dm_list(intptr_t buf, int mode)
 static int
 dm_open(dev_t *devp, int flag, int otyp, cred_t *cp)
 {
-	int		instance;
-	dm_state_t	*sp;
+	minor_t		minor;
+	dm_state_t	*sp = &dm_state;
+	dm_info_t	*dmip;
 
-	instance = getminor(*devp);
+	minor = getminor(*devp);
 
-	sp = ddi_get_soft_state(dm_statep, instance);
+	/* Control node */
+	if (minor == 0) {
+		/* Are we attached ? */
+		if (sp->dip == NULL) {
+			return (ENXIO);
+		} else {
+			return (0);
+		}
+	}
 
-	if (sp == NULL)
+	dmip = dm_info_get(sp, minor);
+	if (dmip == NULL)
 		return (ENXIO);
 
-	if (instance == 0) {
-		/* That is a control node */
-		return (0);
-	} else {
-		return (EINVAL);
-	}
+	return (0);
 }
 
 static int
 dm_close(dev_t dev, int flag, int otyp, cred_t *crp)
 {
-	int		instance;
-	dm_state_t	*sp;
+	minor_t		minor;
+	dm_state_t	*sp = &dm_state;
+	dm_info_t	*dmip;
 
-	instance = getminor(dev);
+	minor = getminor(dev);
 
-	sp = ddi_get_soft_state(dm_statep, instance);
+	/* Control node */
+	if (minor == 0) {
+		/* Are we attached ? */
+		if (sp->dip == NULL) {
+			return (ENXIO);
+		} else {
+			return (0);
+		}
+	}
 
-	if (sp == NULL)
+	dmip = dm_info_get(sp, minor);
+	if (dmip == NULL)
 		return (ENXIO);
 
-	if (instance == 0) {
-		return (0);
-	} else {
-		return (0);
-	}
+	return (0);
 }
 
 static int
@@ -209,20 +308,16 @@ dm_write(dev_t dev, struct uio *uiop, cred_t *crp)
 static int
 dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 {
-	dm_state_t	*sp;
-	dm_entry_t	dm_entry;
-	int		instance;
+	minor_t		minor;
 	int		rc;
+	dm_state_t	*sp = &dm_state;
+	dm_entry_t	dm_entry;
 
-	instance = getminor(dev);
+	minor = getminor(dev);
 
-	sp = ddi_get_soft_state(dm_statep, instance);
-
-	if (sp == NULL)
-		return (ENXIO);
-
-	if (instance != 0) {
-		return (EINVAL);
+	/* If this is not a control node handle it elsewhere */
+	if (minor != 0) {
+		return (dm_ioctl_dev(dev, cmd, arg, mode, crp, rvp));
 	}
 
 	if ((cmd == DM_ATTACH) || (cmd == DM_DETACH)) {
@@ -276,25 +371,16 @@ static struct cb_ops dm_cb_ops = {
 static int
 dm_getinfo(dev_info_t *dip, ddi_info_cmd_t cmd, void *arg, void **rp)
 {
-	int		instance;
-	dm_state_t	*sp;
 	int		rc;
-
-	instance = getminor((dev_t)arg);
+	dm_state_t	*sp = &dm_state;
 
 	switch (cmd) {
 	case DDI_INFO_DEVT2DEVINFO:
-		sp = ddi_get_soft_state(dm_statep, instance);
-		if (sp != NULL) {
-			*rp = sp->dip;
-			rc = DDI_SUCCESS;
-		} else {
-			*rp = NULL;
-			rc = DDI_FAILURE;
-		}
+		*rp = sp->dip;
+		rc = DDI_SUCCESS;
 		break;
 	case DDI_INFO_DEVT2INSTANCE:
-		*rp = (void *)(uintptr_t)instance;
+		*rp = (void *)(uintptr_t)0;
 		rc = DDI_SUCCESS;
 		break;
 	default:
@@ -307,7 +393,7 @@ dm_getinfo(dev_info_t *dip, ddi_info_cmd_t cmd, void *arg, void **rp)
 static int
 dm_attach(dev_info_t *dip, ddi_attach_cmd_t cmd)
 {
-	dm_state_t	*sp;
+	dm_state_t	*sp = &dm_state;
 	int		instance;
 
 	instance = ddi_get_instance(dip);
@@ -322,36 +408,21 @@ dm_attach(dev_info_t *dip, ddi_attach_cmd_t cmd)
 		return (DDI_FAILURE);
 	}
 
-	if (ddi_soft_state_zalloc(dm_statep, instance) != DDI_SUCCESS) {
-		cmn_err(CE_WARN, "dm_attach: ddi_soft_state_zalloc() failed");
-		return (DDI_FAILURE);
-	}
-
-	sp = ddi_get_soft_state(dm_statep, instance);
-
 	sp->dip = dip;
 
 	if (ldi_ident_from_dip(sp->dip, &sp->li) != 0) {
 		cmn_err(CE_WARN, "dm_attach: failed to get LDI identification");
-		ddi_soft_state_free(dm_statep, instance);
 		return (DDI_FAILURE);
 	}
 
-	/* Pre-init device table */
-	for (int i = 0; i < DM_INFO_TABLELEN; i++) {
-		dm_info[i].sp = sp;
-		dm_info[i].target = i;
-	}
-
-	sp->dm_info_map = rmallocmap_wait(DM_INFO_TABLELEN);
-	rmfree(sp->dm_info_map, DM_INFO_TABLELEN, (ulong_t)dm_info);
+	dm_minor_init(sp);
+	dm_info_init(sp);
 
 	if (ddi_create_minor_node(dip, "ctl", S_IFCHR,
 	    instance, DDI_PSEUDO, 0) != DDI_SUCCESS) {
 		cmn_err(CE_WARN, "dm_attach: failed to create minor node");
-		rmfreemap(sp->dm_info_map);
+		dm_minor_fini(sp);
 		ldi_ident_release(sp->li);
-		ddi_soft_state_free(dm_statep, instance);
 		return (DDI_FAILURE);
 	}
 
@@ -363,7 +434,7 @@ dm_attach(dev_info_t *dip, ddi_attach_cmd_t cmd)
 static int
 dm_detach(dev_info_t *dip, ddi_detach_cmd_t cmd)
 {
-	dm_state_t	*sp;
+	dm_state_t	*sp = &dm_state;
 	int		instance;
 
 	instance = ddi_get_instance(dip);
@@ -378,15 +449,14 @@ dm_detach(dev_info_t *dip, ddi_detach_cmd_t cmd)
 		return (DDI_FAILURE);
 	}
 
-	sp = ddi_get_soft_state(dm_statep, instance);
-
 	ddi_remove_minor_node(dip, 0);
 
-	rmfreemap(sp->dm_info_map);
+	dm_minor_fini(sp);
 
 	ldi_ident_release(sp->li);
 
-	ddi_soft_state_free(dm_statep, instance);
+	/* Mark us detached */
+	sp->dip = NULL;
 
 	return (DDI_SUCCESS);
 }
@@ -420,19 +490,7 @@ static struct modlinkage dm_modlinkage = {
 int
 _init(void)
 {
-	int rc;
-
-	rc = ddi_soft_state_init(&dm_statep, sizeof (dm_state_t), 0);
-	if (rc != 0)
-		return (rc);
-
-	rc = mod_install(&dm_modlinkage);
-
-	if (rc != 0) {
-		ddi_soft_state_fini(&dm_statep);
-	}
-
-	return (rc);
+	return (mod_install(&dm_modlinkage));
 }
 
 int
@@ -444,15 +502,5 @@ _info(struct modinfo *mip)
 int
 _fini(void)
 {
-	int rc;
-
-	rc = mod_remove(&dm_modlinkage);
-
-	if (rc != 0) {
-		return (rc);
-	}
-
-	ddi_soft_state_fini(&dm_statep);
-
-	return (rc);
+	return (mod_remove(&dm_modlinkage));
 }
