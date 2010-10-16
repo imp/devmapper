@@ -500,6 +500,7 @@ dm_detach(dev_info_t *dip, ddi_detach_cmd_t cmd)
 
 	ddi_remove_minor_node(dip, 0);
 
+	dm_info_fini(sp);
 	dm_minor_fini(sp);
 
 	ldi_ident_release(sp->li);
