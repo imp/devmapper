@@ -260,9 +260,8 @@ dm_ioctl_dev(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 }
 
 static int
-dm_list(intptr_t buf, int mode)
+dm_list(dm_state_t *sp, intptr_t buf, int mode)
 {
-	dm_state_t	*sp = &dm_state;
 	dm_entry_t	*dmlist;
 	int		rc;
 
@@ -293,11 +292,9 @@ dm_list(intptr_t buf, int mode)
 static int
 dm_open(dev_t *devp, int flag, int otyp, cred_t *cp)
 {
-	minor_t		minor;
+	minor_t		minor = getminor(*devp);
 	dm_state_t	*sp = &dm_state;
 	dm_info_t	*dmip;
-
-	minor = getminor(*devp);
 
 	/* Control node */
 	if (minor == 0) {
@@ -319,11 +316,9 @@ dm_open(dev_t *devp, int flag, int otyp, cred_t *cp)
 static int
 dm_close(dev_t dev, int flag, int otyp, cred_t *crp)
 {
-	minor_t		minor;
+	minor_t		minor = getminor(dev);
 	dm_state_t	*sp = &dm_state;
 	dm_info_t	*dmip;
-
-	minor = getminor(dev);
 
 	/* Control node */
 	if (minor == 0) {
@@ -345,13 +340,42 @@ dm_close(dev_t dev, int flag, int otyp, cred_t *crp)
 static int
 dm_read(dev_t dev, struct uio *uiop, cred_t *crp)
 {
-	return (0);
+	minor_t		minor = getminor(dev);
+	dm_state_t	*sp = &dm_state;
+	dm_info_t	*dmip;
+
+	/* Control node doesn't support IO */
+	if (minor == 0) {
+		return (EIO);
+	}
+
+	dmip = dm_info_get(sp, minor);
+
+	if (dmip == NULL) {
+		return (ENXIO);
+	}
+
+	return (ldi_read(dmip->lh, uiop, crp));
 }
 
 static int
 dm_write(dev_t dev, struct uio *uiop, cred_t *crp)
 {
-	return (0);
+	minor_t		minor = getminor(dev);
+	dm_state_t	*sp = &dm_state;
+	dm_info_t	*dmip;
+
+	/* Control node doesn't support IO */
+	if (minor == 0) {
+		return (EIO);
+	}
+	dmip = dm_info_get(sp, minor);
+
+	if (dmip == NULL) {
+		return (ENXIO);
+	}
+
+	return (ldi_write(dmip->lh, uiop, crp));
 }
 
 static int
@@ -379,7 +403,7 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 
 	switch (cmd) {
 	case DM_LIST:
-		rc = dm_list(arg, mode);
+		rc = dm_list(sp, arg, mode);
 		break;
 	case DM_ATTACH:
 		rc = dm_attach_dev(sp, dm_entry.name, dm_entry.dev, crp);
