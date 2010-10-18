@@ -381,12 +381,10 @@ dm_write(dev_t dev, struct uio *uiop, cred_t *crp)
 static int
 dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 {
-	minor_t		minor;
+	minor_t		minor = getminor(dev);
 	int		rc;
 	dm_state_t	*sp = &dm_state;
 	dm_entry_t	dm_entry;
-
-	minor = getminor(dev);
 
 	/* If this is not a control node handle it elsewhere */
 	if (minor != 0) {
