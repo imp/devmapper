@@ -24,6 +24,7 @@
  */
 
 #include <sys/types.h>
+#include <sys/mkdev.h>
 #include <libdevinfo.h>
 #include <regex.h>
 #include <devfsadm.h>
@@ -31,37 +32,63 @@
 #include <strings.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <sys/mkdev.h>
+
 #include <sys/dm.h>
 
+#define	DM_CONTROL_NODE		"dmctl"
+#define	DM_CONTROL_LINUX	"mapper/control"
 
 /*
  * For the master device:
  *	/dev/dmctl -> /devices/pseudo/dm@0:ctl
  *
  * For each other device
- *	/dev/mapper/dsk/1 -> /devices/pseudo/dm@0:1
- *	/dev/mapper/rdsk/1 -> /devices/pseudo/dm@0:1,raw
+ *	/dev/dm/dsk/name -> /devices/pseudo/dm@0:name,blk
+ *	/dev/dm/rdsk/name -> /devices/pseudo/dm@0:name,raw
+ *
+ * Linux familiarity links
+ *	/dev/mapper/control -> /dev/dmctl
+ *	/dev/mapper/name -> /dev/dm/dsk/name
  */
+
+/* Check that the string 's' ends with the string 'e' */
+static int
+endswith(const char *s, const char *e)
+{
+	char	*ptr;
+
+	ptr = s + strlen(s) - strlen(e);
+	return (strcmp(ptr, e));
+}
+
 static int
 dm(di_minor_t minor, di_node_t node)
 {
 	dev_t	dev;
-	char mn[MAXNAMELEN + 1];
-	char blkname[MAXNAMELEN + 1];
-	char rawname[MAXNAMELEN + 1];
-	char path[PATH_MAX + 1];
+	minor_t	minorno;
+	char	minorname[MAXNAMELEN + 1];
+	char	dmname[MAXNAMELEN + 1];
+	char	blkname[MAXNAMELEN + 1];
+	char	rawname[MAXNAMELEN + 1];
+	char	path[PATH_MAX + 1];
 
-	(void) strcpy(mn, di_minor_name(minor));
+	(void) strcpy(minorname, di_minor_name(minor));
+	dev = di_minor_devt(minor);
+	minorno = minor(dev);
 
-	if (strcmp(mn, "ctl") == 0) {
-		(void) devfsadm_mklink(DM_CTL_NAME, node, minor, 0);
-	} else {
-		dev = di_minor_devt(minor);
-		(void) snprintf(blkname, sizeof (blkname), "%d",
-		    (int)minor(dev));
-		(void) snprintf(rawname, sizeof (rawname), "%d,raw",
-		    (int)minor(dev));
+	/* Is it a control node ? */
+	if ((minorno == 0) && (strcmp(minorname, "ctl") == 0)) {
+		(void) devfsadm_mklink(DM_CONTROL_NODE, node, minor, 0);
+		(void) devfsadm_secondary_link(DM_CONTROL_LINUX,
+		    DM_CONTROL_NODE, 0);
+		return (DEVFSADM_CONTINUE);
+	}
+
+	/* If we got here that is not a control node */
+	(void) strlcpy(dmname, sizeof (dmname), minorname);
+	
+	(void) snprintf(blkname, sizeof (blkname), "%s,blk", minorname);
+	(void) snprintf(rawname, sizeof (rawname), "%s,raw", minorname);
 
 		if (strcmp(mn, blkname) == 0) {
 			(void) snprintf(path, sizeof (path), "%s/%s",
@@ -74,7 +101,7 @@ dm(di_minor_t minor, di_node_t node)
 		}
 
 		(void) devfsadm_mklink(path, node, minor, 0);
-	}
+
 	return (DEVFSADM_CONTINUE);
 }
 

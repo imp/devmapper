@@ -4,6 +4,7 @@
 #
 .KEEP_STATE:
 
+ON_SRC          = /data/opensolaris/onnv-gate
 EXTRA_INCLUDES	=
 
 # Utilities
