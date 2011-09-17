@@ -20,7 +20,7 @@
  */
 
 /*
- * Copyright 2010 Grigale Ltd. All rights reserved.
+ * Copyright 2011 Grigale Ltd. All rights reserved.
  * Use is subject to license terms.
  */
 
@@ -221,7 +221,7 @@ dm_detach_dev(dm_state_t *sp, char *name)
 	minor_t		minor;
 	dm_info_t	*dmp = NULL;
 
-	cmn_err(CE_CONT, "Detaching old map %s\n", name);
+	cmn_err(CE_CONT, "Detaching existing map %s\n", name);
 
 	minor = dm_name2minor(sp, name);
 
