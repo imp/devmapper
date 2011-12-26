@@ -39,6 +39,7 @@
 
 #include <sys/dm.h>
 #include <sys/dm_impl.h>
+#include <sys/dm_ops.h>
 
 static dm_state_t	dm_state = {
 	.dip		= NULL,
