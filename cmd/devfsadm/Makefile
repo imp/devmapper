@@ -1,5 +1,5 @@
 #
-# Copyrigh 2010 Grigale Ltd. All rights reserved.
+# Copyright 2011 Grigale Ltd. All rights reserved.
 # Use is subject to license terms.
 #
 .KEEP_STATE:
