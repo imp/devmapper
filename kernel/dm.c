@@ -166,6 +166,7 @@ dm_create_minor_nodes(dm_state_t *sp, char *name, minor_t minor)
 	return (DDI_SUCCESS);
 }
 
+
 static void
 dm_remove_minor_nodes(dm_state_t *sp, char *name)
 {
@@ -184,7 +185,62 @@ dm_remove_minor_nodes(dm_state_t *sp, char *name)
 
 
 static int
-dm_attach_dev(dm_state_t *sp, char *name, char *dev, cred_t *crp)
+dm_ioctl_dev(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
+{
+	minor_t		minor;
+	int		rc;
+	dm_state_t	*sp = &dm_state;
+	dm_info_t	*dmip;
+
+	minor = getminor(dev);
+
+	dmip = dm_info_get(sp, minor);
+
+	if (dmip == NULL)
+		return (ENXIO);
+
+	return (EINVAL);
+}
+
+/*
+ * Mapping manipulations
+ */
+
+static int
+dm_list_mappings(dm_state_t *sp, intptr_t buf, int mode)
+{
+	dm_entry_t	*dmlist;
+	int		rc;
+
+	dmlist = kmem_zalloc(sizeof (dm_entry_t) * DM_MINOR_MAX, KM_SLEEP);
+
+	for (int i = 1; i <= DM_MINOR_MAX; i++) {
+		const char	*name = "";
+		const char	*dev = "";
+		dm_info_t	*dmip = dm_info_get(sp, (minor_t)i);
+
+		if (dmip != NULL) {
+			name = refstr_value(dmip->name);
+			dev = refstr_value(dmip->dev);
+			cmn_err(CE_CONT, "Found mapping %s (%d)\n", name, i);
+		}
+
+		(void) strncpy(dmlist[i - 1].name, name, MAXNAMELEN);
+		(void) strncpy(dmlist[i - 1].dev, dev, MAXPATHLEN);
+	}
+
+	rc = ddi_copyout(dmlist, (void *)buf,
+	    sizeof (dm_entry_t) * DM_MINOR_MAX, mode);
+	kmem_free(dmlist, sizeof (dm_entry_t) * DM_MINOR_MAX);
+
+	return ((rc == -1) ? (EFAULT) : (0));
+}
+
+/*
+ * Allocate new mapping and attach it
+ */ 
+static int
+dm_attach_mapping(dm_state_t *sp, char *name, char *dev, cred_t *crp)
 {
 	dm_info_t	*dmp;
 	minor_t		minor;
@@ -216,8 +272,11 @@ dm_attach_dev(dm_state_t *sp, char *name, char *dev, cred_t *crp)
 	return (rc);
 }
 
+/*
+ * Detach the existing mapping and free its resources
+ */
 static int
-dm_detach_dev(dm_state_t *sp, char *name)
+dm_detach_mapping(dm_state_t *sp, char *name)
 {
 	minor_t		minor;
 	dm_info_t	*dmp = NULL;
@@ -240,54 +299,6 @@ dm_detach_dev(dm_state_t *sp, char *name)
 	dm_minor_free(sp, minor);
 
 	return (0);
-}
-
-static int
-dm_ioctl_dev(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
-{
-	minor_t		minor;
-	int		rc;
-	dm_state_t	*sp = &dm_state;
-	dm_info_t	*dmip;
-
-	minor = getminor(dev);
-
-	dmip = dm_info_get(sp, minor);
-
-	if (dmip == NULL)
-		return (ENXIO);
-
-	return (EINVAL);
-}
-
-static int
-dm_list_mappings(dm_state_t *sp, intptr_t buf, int mode)
-{
-	dm_entry_t	*dmlist;
-	int		rc;
-
-	dmlist = kmem_zalloc(sizeof (dm_entry_t) * DM_MINOR_MAX, KM_SLEEP);
-
-	for (int i = 1; i <= DM_MINOR_MAX; i++) {
-		const char	*name = "";
-		const char	*dev = "";
-		dm_info_t	*dmip = dm_info_get(sp, (minor_t)i);
-
-		if (dmip != NULL) {
-			name = refstr_value(dmip->name);
-			dev = refstr_value(dmip->dev);
-			cmn_err(CE_CONT, "Found mapping %s (%d)\n", name, i);
-		}
-
-		(void) strncpy(dmlist[i - 1].name, name, MAXNAMELEN);
-		(void) strncpy(dmlist[i - 1].dev, dev, MAXPATHLEN);
-	}
-
-	rc = ddi_copyout(dmlist, (void *)buf,
-	    sizeof (dm_entry_t) * DM_MINOR_MAX, mode);
-	kmem_free(dmlist, sizeof (dm_entry_t) * DM_MINOR_MAX);
-
-	return ((rc == -1) ? (EFAULT) : (0));
 }
 
 
@@ -409,11 +420,11 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 		rc = dm_list_mappings(sp, arg, mode);
 		break;
 	case DM_ATTACH_MAPPING:
-		rc = dm_attach_dev(sp, dm_entry.name, dm_entry.dev, crp);
+		rc = dm_attach_mapping(sp, dm_entry.name, dm_entry.dev, crp);
 		rc = (rc == DDI_SUCCESS) ? 0 : EIO;
 		break;
 	case DM_DETACH_MAPPING:
-		rc = dm_detach_dev(sp, dm_entry.name);
+		rc = dm_detach_mapping(sp, dm_entry.name);
 
 		break;
 	default:
