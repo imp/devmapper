@@ -24,13 +24,13 @@ HDRS		+= ../include/sys/dm_impl.h
 HDRS		+= ../include/sys/dm_ops.h
 
 SRCS		= dm.c
-PLUGINS_SRCS	= $(PLUGINS:%=plugins/%.c)
+PLUGIN_SRCS	= $(PLUGINS:%=plugins/%.c)
 
 OBJS32		= $(SRCS:%.c=32/%.o)
 OBJS64		= $(SRCS:%.c=64/%.o)
 
-PLUGIN_OBJS32	= $(PLUGIN_SRCS:%.c=32/%.o)
-PLUGIN_OBJS64	= $(PLUGIN_SRCS:%.c=64/%.o)
+PLUGIN_OBJS32	= $(PLUGIN_SRCS:plugins/%.c=32/%.o)
+PLUGIN_OBJS64	= $(PLUGIN_SRCS:plugins/%.c=64/%.o)
 
 MODULE32	= $(MODULE:%=32/%)
 MODULE64	= $(MODULE:%=64/%)
@@ -79,10 +79,10 @@ devlink:
 	echo "type=ddi_pseudo;name=dm\tdm\M0\tmapper/control" >> /etc/devlink.tab
 
 lint:
-	$(LINT.c) $(SRCS)
+	$(LINT.c) $(SRCS) $(PLUGIN_SRCS)
 
 cstyle:
 	cstyle -chpPv $(SRCS) $(HDRS)
 
 clean:
-	$(RM) $(TARGET) $(MODULE32) $(MODULE64) $(OBJS32) $(OBJS64)
+	$(RM) $(TARGET) $(PLUGIN_OBJS32) $(PLUGIN_OBJS64) $(OBJS32) $(OBJS64)
