@@ -20,7 +20,7 @@
  */
 
 /*
- * Copyright 2010 Grigale Ltd. All rights reserved.
+ * Copyright 2011 Grigale Ltd. All rights reserved.
  * Use is subject to license terms.
  */
 
@@ -45,9 +45,18 @@ extern "C" {
 
 #define	DM_MINOR_MAX	20480
 
-#define	DM_LIST		1024
-#define	DM_ATTACH	1025
-#define	DM_DETACH	1026
+/*
+ * ioctl() codes
+ */
+/* Plugin manipulations */
+#define	DM_LIST_PLUGINS		1024
+#define	DM_LOAD_PLUGIN		1025
+#define	DM_UNLOAD_PLUGIN	1026
+
+/* Mapping manipulations */
+#define	DM_LIST_MAPPINGS	2048
+#define	DM_ATTACH_MAPPING	2049
+#define	DM_DETACH_MAPPING	2050
 
 typedef struct {
 	char		name[MAXNAMELEN];

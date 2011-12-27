@@ -261,7 +261,7 @@ dm_ioctl_dev(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 }
 
 static int
-dm_list(dm_state_t *sp, intptr_t buf, int mode)
+dm_list_mappings(dm_state_t *sp, intptr_t buf, int mode)
 {
 	dm_entry_t	*dmlist;
 	int		rc;
@@ -290,6 +290,10 @@ dm_list(dm_state_t *sp, intptr_t buf, int mode)
 	return ((rc == -1) ? (EFAULT) : (0));
 }
 
+
+/*
+ * Standard Solaris character driver entry points
+ */
 static int
 dm_open(dev_t *devp, int flag, int otyp, cred_t *cp)
 {
@@ -392,7 +396,7 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 		return (dm_ioctl_dev(dev, cmd, arg, mode, crp, rvp));
 	}
 
-	if ((cmd == DM_ATTACH) || (cmd == DM_DETACH)) {
+	if ((cmd == DM_ATTACH_MAPPING) || (cmd == DM_DETACH_MAPPING)) {
 		rc = ddi_copyin((const void *)arg, &dm_entry,
 		    sizeof (dm_entry_t), mode);
 		if (rc == -1) {
@@ -401,14 +405,14 @@ dm_ioctl(dev_t dev, int cmd, intptr_t arg, int mode, cred_t *crp, int *rvp)
 	}
 
 	switch (cmd) {
-	case DM_LIST:
-		rc = dm_list(sp, arg, mode);
+	case DM_LIST_MAPPINGS:
+		rc = dm_list_mappings(sp, arg, mode);
 		break;
-	case DM_ATTACH:
+	case DM_ATTACH_MAPPING:
 		rc = dm_attach_dev(sp, dm_entry.name, dm_entry.dev, crp);
 		rc = (rc == DDI_SUCCESS) ? 0 : EIO;
 		break;
-	case DM_DETACH:
+	case DM_DETACH_MAPPING:
 		rc = dm_detach_dev(sp, dm_entry.name);
 
 		break;

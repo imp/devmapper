@@ -20,7 +20,7 @@
  */
 
 /*
- * Copyright 2010 Grigale Ltd. All rights reserved.
+ * Copyright 2011 Grigale Ltd. All rights reserved.
  * Use is subject to license terms.
  */
 
@@ -55,7 +55,7 @@ dm_list(int dmctl, int argc, char **argv, const char *usage)
 		return (EXIT_FAILURE);
 	}
 
-	rc = ioctl(dmctl, DM_LIST, names);
+	rc = ioctl(dmctl, DM_LIST_MAPPINGS, names);
 	if (rc != 0) {
 		free(names);
 		return (rc);
@@ -95,7 +95,7 @@ dm_create(int dmctl, int argc, char **argv, const char *usage)
 
 	(void) strncpy(map.name, argv[0], MAXNAMELEN);
 	(void) strncpy(map.dev, argv[1], MAXPATHLEN);
-	rc = ioctl(dmctl, DM_ATTACH, &map);
+	rc = ioctl(dmctl, DM_ATTACH_MAPPING, &map);
 
 	return ((rc == -1) ? EXIT_FAILURE : EXIT_SUCCESS);
 }
@@ -112,7 +112,7 @@ dm_remove(int dmctl, int argc, char **argv, const char *usage)
 	}
 
 	(void) strncpy(map.name, argv[0], MAXNAMELEN);
-	rc = ioctl(dmctl, DM_DETACH, &map);
+	rc = ioctl(dmctl, DM_DETACH_MAPPING, &map);
 
 	return ((rc == -1) ? EXIT_FAILURE : EXIT_SUCCESS);
 }
