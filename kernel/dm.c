@@ -45,6 +45,155 @@ static dm_state_t	dm_state = {
 	.dip		= NULL,
 };
 
+
+/*
+ * Device mapping plugin management
+ *
+ * device mapper is extendible via plugin framework
+ * explain here more
+ */
+
+typedef struct {
+	ddi_modhandle_t		pmod;
+	dm_plugin_ops_t		*dmp_ops;
+	int			refcnt;
+} dm_plugin_entry_t;
+
+typedef struct {
+	dm_plugin_entry_t	**table;
+	uint32_t		count;
+	kmutex_t		lock;
+} dm_plugin_table_t;
+
+static dm_plugin_table_t	dm_plugin_table;
+
+#define	DM_PLUGIN_MODNAMELEN	80
+
+static void
+dm_plugin_table_init(void)
+{
+	mutex_init(&dm_plugin_table.lock, NULL, MUTEX_DRIVER, NULL);
+}
+
+static void
+dm_plugin_table_fini(void)
+{
+	mutex_destroy(&dm_plugin_table.lock);
+}
+
+static void
+dm_plugin_add(dm_plugin_entry_t *plugin)
+{
+	ASSERT(plugin);
+
+	mutex_enter(&dm_plugin_table.lock);
+	
+	mutex_exit(&dm_plugin_table.lock);
+}
+
+static void
+dm_plugin_rem(dm_plugin_entry_t *plugin)
+{
+	ASSERT(plugin);
+
+	mutex_enter(&dm_plugin_table.lock);
+
+	mutex_exit(&dm_plugin_table.lock);
+}
+
+/* Lookup named plugin and return pointer to its entry if found */
+static dm_plugin_entry_t *
+dm_plugin_lookup(const char *name)
+{
+	dm_plugin_entry_t	**table;
+	dm_plugin_entry_t	*plugin = NULL;
+
+	mutex_enter(&dm_plugin_table.lock);
+
+	table = dm_plugin_table.table;
+
+	for (int i = 0; i < dm_plugin_table.count; i++) {
+		if (strcmp(table[i]->dmp_ops->dpo_name, name) == 0) {
+			plugin = table[i];
+			break;
+		}
+	}
+
+	mutex_exit(&dm_plugin_table.lock);
+
+	return (plugin);
+}
+
+/*
+ * Given the name load the plugin module.
+ * The module name is constructed as 'misc/dm/dm_NAME', where NAME
+ * is the dm_plugin_load() argument
+ */
+static dm_plugin_entry_t *
+dm_plugin_load(const char *name)
+{
+	char			modname[DM_PLUGIN_MODNAMELEN];
+	dm_plugin_entry_t	*plugin;
+	int			error;
+
+	(void) snprintf(modname, DM_PLUGIN_MODNAMELEN, "misc/dm/dm_%s", name);
+	plugin = kmem_zalloc(sizeof (*plugin), KM_SLEEP);
+	plugin->pmod = ddi_modopen(modname, KRTLD_MODE_FIRST, &error);
+	if (error != 0) {
+		kmem_free(plugin, sizeof (*plugin));
+		return (NULL);
+	}
+
+	plugin->dmp_ops = ddi_modsym(plugin->pmod, "dm_ops", &error);
+	if (plugin->dmp_ops == NULL) {
+		ddi_modclose(plugin->pmod);
+		kmem_free(plugin, sizeof (*plugin));
+		return (NULL);
+	}
+
+	return (plugin);
+}
+
+/* Given the plugin entry unload the plugin module */
+static int
+dm_plugin_unload(dm_plugin_entry_t *plugin)
+{
+	ASSERT(plugin);
+
+	ddi_modclose(plugin->pmod);
+	kmem_free(plugin, sizeof (*plugin));
+
+	return (DDI_SUCCESS);
+}
+
+/* Load and add plugin by name */
+static int
+dm_plugin_resgister(const char *name)
+{
+	dm_plugin_entry_t	*plugin;
+
+	plugin = dm_plugin_load(name);
+	dm_plugin_add(plugin);
+
+	return (DDI_SUCCESS);
+}
+
+/* Lookup, remove and unload plugin by name */
+static int
+dm_plugin_unresgister(const char *name)
+{
+	dm_plugin_entry_t	*plugin;
+
+	plugin = dm_plugin_lookup(name);
+	dm_plugin_rem(plugin);
+	dm_plugin_unload(plugin);
+
+	return (DDI_SUCCESS);
+}
+
+/*
+ * minor number management routines
+ */
 static void
 dm_minor_init(dm_state_t *sp)
 {
